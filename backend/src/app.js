@@ -27,6 +27,7 @@ const notificationRoutes = require("./routes/notification.routes");
 const reminderRoutes = require("./routes/reminder.routes");
 const followUpRoutes = require("./routes/followUp.routes");
 const consentRoutes = require("./routes/consent.routes");
+const verificationRoutes = require("./routes/verification.routes");
 
 const app = express();
 
@@ -93,6 +94,7 @@ app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/reminders", reminderRoutes);
 app.use("/api/v1/follow-ups", followUpRoutes);
 app.use("/api/v1/consents", consentRoutes);
+app.use("/api/v1/verification", verificationRoutes);
 
 // ----------------------------------------------------
 // 404 & Centralized Error Handlers
