@@ -67,7 +67,7 @@ const ProgressScreen = ({ route, navigation }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f0f4f8', padding: 20 },
-  headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#102a43' },
+  headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#113F36' },
   patientSubText: { fontSize: 16, color: '#627d98', marginBottom: 20 },
   
   photoContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 30 },
@@ -76,15 +76,15 @@ const styles = StyleSheet.create({
   
   imagePlaceholder: { width: '100%', height: 120, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
   emoji: { fontSize: 30 },
-  imageSubtext: { fontSize: 12, color: '#555', marginTop: 5 },
+  imageSubtext: { fontSize: 12, color: '#38635B', marginTop: 5 },
   
-  aiTag: { fontSize: 12, fontWeight: 'bold', color: '#102a43' },
+  aiTag: { fontSize: 12, fontWeight: 'bold', color: '#113F36' },
 
   notesSection: { backgroundColor: '#ffffff', padding: 20, borderRadius: 12, marginBottom: 30, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, elevation: 3 },
   sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#334e68', marginBottom: 10 },
   textArea: { backgroundColor: '#f4f6f8', padding: 15, borderRadius: 8, borderWidth: 1, borderColor: '#d9e2ec', height: 100, textAlignVertical: 'top', fontSize: 16 },
   
-  saveButton: { backgroundColor: '#0066cc', padding: 18, borderRadius: 12, alignItems: 'center', marginBottom: 40 },
+  saveButton: { backgroundColor: '#0F6B59', padding: 18, borderRadius: 12, alignItems: 'center', marginBottom: 40 },
   saveButtonText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }
 });
 

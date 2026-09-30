@@ -107,34 +107,34 @@ const DashboardScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F4F7FA' }, // Soft modern background
+  container: { flex: 1, backgroundColor: '#F2F7F6' }, // Soft modern background
   
   // Premium Header Styling
   topHeader: { 
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', 
     backgroundColor: '#ffffff', padding: 25, paddingTop: 40, 
     borderBottomLeftRadius: 35, borderBottomRightRadius: 35, 
-    shadowColor: '#1A365D', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.08, shadowRadius: 15, elevation: 8, 
+    shadowColor: '#113F36', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.08, shadowRadius: 15, elevation: 8, 
     marginBottom: 25 
   },
-  greeting: { fontSize: 26, fontWeight: '900', color: '#1A365D', marginBottom: 6, letterSpacing: -0.5 },
+  greeting: { fontSize: 26, fontWeight: '900', color: '#113F36', marginBottom: 6, letterSpacing: -0.5 },
   subGreeting: { fontSize: 14, color: '#718096', fontWeight: '600' },
-  avatarPlaceholder: { width: 56, height: 56, backgroundColor: '#3182CE', borderRadius: 28, justifyContent: 'center', alignItems: 'center', shadowColor: '#3182CE', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8 },
+  avatarPlaceholder: { width: 56, height: 56, backgroundColor: '#0F6B59', borderRadius: 28, justifyContent: 'center', alignItems: 'center', shadowColor: '#0F6B59', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8 },
   avatarText: { color: '#ffffff', fontWeight: 'bold', fontSize: 20 },
   
   // Analytics & Schedule
   statsContainer: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 25 },
-  statCard: { flex: 1, backgroundColor: '#ffffff', borderRadius: 20, padding: 18, marginHorizontal: 5, alignItems: 'center', shadowColor: '#1A365D', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 4 },
+  statCard: { flex: 1, backgroundColor: '#ffffff', borderRadius: 20, padding: 18, marginHorizontal: 5, alignItems: 'center', shadowColor: '#113F36', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 4 },
   statIcon: { fontSize: 28, marginBottom: 8 },
   statValue: { fontSize: 22, fontWeight: '900', color: '#2D3748', marginBottom: 2 },
   statLabel: { fontSize: 12, color: '#718096', fontWeight: '700' },
 
-  sectionTitle: { fontSize: 18, fontWeight: '800', color: '#1A365D', paddingHorizontal: 25, marginBottom: 15 },
+  sectionTitle: { fontSize: 18, fontWeight: '800', color: '#113F36', paddingHorizontal: 25, marginBottom: 15 },
   
   // Phase 2 Tabs
   tabContainer: { marginBottom: 20 },
-  tabBtn: { paddingVertical: 10, paddingHorizontal: 20, backgroundColor: '#EDF2F7', borderRadius: 25, marginRight: 10 },
-  tabBtnActive: { backgroundColor: '#3182CE' },
+  tabBtn: { paddingVertical: 10, paddingHorizontal: 20, backgroundColor: '#E8F3F1', borderRadius: 25, marginRight: 10 },
+  tabBtnActive: { backgroundColor: '#0F6B59' },
   tabText: { color: '#718096', fontWeight: '700', fontSize: 13 },
   tabTextActive: { color: '#ffffff' },
 
@@ -143,15 +143,15 @@ const styles = StyleSheet.create({
   // Premium Card Styling
   card: { 
     backgroundColor: '#ffffff', borderRadius: 24, padding: 22, marginBottom: 18, 
-    shadowColor: '#1A365D', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.06, shadowRadius: 20, elevation: 5, 
-    borderWidth: 1, borderColor: '#EDF2F7' 
+    shadowColor: '#113F36', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.06, shadowRadius: 20, elevation: 5, 
+    borderWidth: 1, borderColor: '#E8F3F1' 
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 15 },
   patientName: { fontSize: 20, fontWeight: '800', color: '#2D3748', marginBottom: 6, letterSpacing: -0.3 },
   patientInfo: { fontSize: 13, color: '#A0AEC0', fontWeight: '700' },
   
   // AI Snippet
-  aiSnippetBox: { backgroundColor: '#F7FAFC', padding: 12, borderRadius: 10, marginBottom: 15, borderWidth: 1, borderColor: '#EDF2F7' },
+  aiSnippetBox: { backgroundColor: '#F7FAFC', padding: 12, borderRadius: 10, marginBottom: 15, borderWidth: 1, borderColor: '#E8F3F1' },
   aiSnippetText: { fontSize: 13, color: '#4A5568', fontStyle: 'italic', fontWeight: '600' },
 
   // Soft Medical Badges
@@ -159,8 +159,8 @@ const styles = StyleSheet.create({
   triageText: { fontSize: 11, fontWeight: '900', letterSpacing: 0.8 },
   
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#F7FAFC', paddingTop: 18 },
-  viewDetailsText: { fontSize: 15, color: '#3182CE', fontWeight: '800' },
-  arrowIcon: { fontSize: 18, color: '#3182CE', fontWeight: '900' }
+  viewDetailsText: { fontSize: 15, color: '#0F6B59', fontWeight: '800' },
+  arrowIcon: { fontSize: 18, color: '#0F6B59', fontWeight: '900' }
 });
 
 export default DashboardScreen;

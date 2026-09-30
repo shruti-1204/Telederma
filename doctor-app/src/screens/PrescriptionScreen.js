@@ -81,7 +81,7 @@ const PrescriptionScreen = ({ route, navigation }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f0f4f8', padding: 20 },
-  headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#102a43' },
+  headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#113F36' },
   patientSubText: { fontSize: 16, color: '#627d98', marginBottom: 20 },
   formCard: { backgroundColor: '#ffffff', padding: 20, borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, elevation: 3, marginBottom: 20 },
   label: { fontSize: 14, fontWeight: 'bold', color: '#334e68', marginBottom: 8 },

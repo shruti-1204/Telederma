@@ -120,29 +120,29 @@ const VideoCallScreen = ({ route, navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1e1e1e' },
-  videoSection: { height: '40%', backgroundColor: '#000000', position: 'relative' },
+  container: { flex: 1, backgroundColor: '#122723' },
+  videoSection: { height: '40%', backgroundColor: '#122723', position: 'relative' },
   patientVideoArea: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   placeholderText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
-  doctorVideoArea: { position: 'absolute', top: 20, right: 15, width: 80, height: 110, backgroundColor: '#333', borderRadius: 8, borderWidth: 1, borderColor: '#555', justifyContent: 'center', alignItems: 'center' },
+  doctorVideoArea: { position: 'absolute', top: 20, right: 15, width: 80, height: 110, backgroundColor: '#24453F', borderRadius: 8, borderWidth: 1, borderColor: '#38635B', justifyContent: 'center', alignItems: 'center' },
   cameraText: { color: '#bbb', fontWeight: 'bold', fontSize: 12 },
   doctorInitials: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   
   controlBar: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingBottom: 15, position: 'absolute', bottom: 0, width: '100%' },
-  controlBtn: { backgroundColor: '#333', padding: 12, borderRadius: 25, marginHorizontal: 10 },
-  controlBtnActive: { backgroundColor: '#555' },
+  controlBtn: { backgroundColor: '#24453F', padding: 12, borderRadius: 25, marginHorizontal: 10 },
+  controlBtnActive: { backgroundColor: '#38635B' },
   controlBtnText: { color: '#fff', fontSize: 18 },
   endCallBtn: { backgroundColor: '#ff4444', paddingHorizontal: 20 },
   endCallText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
 
-  prescriptionSection: { flex: 1, backgroundColor: '#F4F7FA', borderTopLeftRadius: 25, borderTopRightRadius: 25, shadowColor: '#000', shadowOffset: { width: 0, height: -5 }, shadowOpacity: 0.1, elevation: 10 },
+  prescriptionSection: { flex: 1, backgroundColor: '#F2F7F6', borderTopLeftRadius: 25, borderTopRightRadius: 25, shadowColor: '#000', shadowOffset: { width: 0, height: -5 }, shadowOpacity: 0.1, elevation: 10 },
   rxHeader: { backgroundColor: '#ffffff', padding: 20, borderTopLeftRadius: 25, borderTopRightRadius: 25, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  rxTitle: { fontSize: 20, fontWeight: '900', color: '#1A365D' },
+  rxTitle: { fontSize: 20, fontWeight: '900', color: '#113F36' },
   rxSubtitle: { fontSize: 14, color: '#718096', fontWeight: '600', marginTop: 3 },
   
   formContainer: { padding: 20 },
   medicineBlock: { backgroundColor: '#ffffff', padding: 15, borderRadius: 12, marginBottom: 15, borderWidth: 1, borderColor: '#E2E8F0' },
-  medLabel: { fontSize: 14, fontWeight: 'bold', color: '#3182CE', marginBottom: 10 },
+  medLabel: { fontSize: 14, fontWeight: 'bold', color: '#0F6B59', marginBottom: 10 },
   label: { fontSize: 14, fontWeight: '700', color: '#4A5568', marginBottom: 8, marginTop: 10 },
   input: { backgroundColor: '#F7FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 8, padding: 12, fontSize: 15, marginBottom: 10, color: '#2D3748' },
   textArea: { height: 80, textAlignVertical: 'top', backgroundColor: '#ffffff' },
@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
   addMedBtn: { alignSelf: 'flex-start', paddingVertical: 10, paddingHorizontal: 15, backgroundColor: '#E2E8F0', borderRadius: 8, marginBottom: 20 },
   addMedBtnText: { color: '#2D3748', fontWeight: 'bold', fontSize: 14 },
   
-  saveBtn: { backgroundColor: '#0066cc', padding: 18, borderRadius: 15, alignItems: 'center', marginTop: 15, marginBottom: 40 },
+  saveBtn: { backgroundColor: '#0F6B59', padding: 18, borderRadius: 15, alignItems: 'center', marginTop: 15, marginBottom: 40 },
   saveBtnText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' }
 });
 
