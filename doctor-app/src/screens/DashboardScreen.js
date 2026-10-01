@@ -1,21 +1,60 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ScrollView } from 'react-native';
-
-const dummyPatients = [
-  { id: '1', name: 'Rahul Sharma', time: '10:30 AM', category: 'Pending Consultations', triage: 'RED', aiSummary: 'Severe itching, redness for 3 days.' },
-  { id: '2', name: 'Anita Verma', time: '11:15 AM', category: "Today's Appointments", triage: 'YELLOW', aiSummary: 'Mild burning sensation on arm.' },
-  { id: '3', name: 'Vikram Singh', time: '01:00 PM', category: 'Follow-ups', triage: 'GREEN', aiSummary: 'Reviewing Clindamycin treatment.' },
-  { id: '4', name: 'Priya Desai', time: 'Tomorrow', category: 'Upcoming Patients', triage: 'YELLOW', aiSummary: 'New skin lesion reported.' }
-];
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import api from '../services/api';
 
 const CATEGORIES = ["All", "Pending Consultations", "Today's Appointments", "Upcoming Patients", "Follow-ups"];
 
 const DashboardScreen = ({ navigation }) => {
+  const [user, setUser] = useState(null);
   const [activeTab, setActiveTab] = useState("All");
+  const [patients, setPatients] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      // Fetch Doctor Profile for Name
+      const meRes = await api.get('/auth/me');
+      if (meRes.data && meRes.data.data) {
+        setUser(meRes.data.data);
+      }
+
+      // Fetch Appointments
+      const response = await api.get('/appointments');
+      if (response.data && response.data.data) {
+        // Map backend schema to frontend UI schema
+        const formattedData = response.data.data.map(appt => {
+          let category = "Pending Consultations";
+          let triage = "YELLOW";
+          if (appt.status === 'CONFIRMED') { category = "Today's Appointments"; triage = 'YELLOW'; }
+          if (appt.status === 'COMPLETED') { category = "Follow-ups"; triage = 'GREEN'; }
+          if (appt.status === 'PENDING') { category = "Pending Consultations"; triage = 'RED'; }
+          
+          return {
+            id: appt.id,
+            name: appt.patient?.user?.name || "Unknown Patient",
+            time: new Date(appt.slotStart).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+            category: category,
+            triage: triage,
+            aiSummary: "Awaiting AI Triage Analysis...",
+            backendData: appt
+          };
+        });
+        setPatients(formattedData);
+      }
+    } catch (error) {
+      console.error("Error fetching appointments:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredPatients = activeTab === "All" 
-    ? dummyPatients 
-    : dummyPatients.filter(p => p.category === activeTab);
+    ? patients 
+    : patients.filter(p => p.category === activeTab);
 
   const renderPatientCard = ({ item }) => {
     const getTriageColor = (triage) => {
@@ -34,7 +73,7 @@ const DashboardScreen = ({ navigation }) => {
         <View style={styles.cardHeader}>
           <View style={{ flex: 1 }}>
             <Text style={styles.patientName}>{item.name}</Text>
-            <Text style={styles.patientInfo}>{item.category}  •  {item.time}</Text>
+            <Text style={styles.patientInfo}>{item.category}  â€¢  {item.time}</Text>
           </View>
           <View style={[styles.triageBadge, { backgroundColor: colors.bg }]}>
             <Text style={[styles.triageText, { color: colors.text }]}>{item.triage}</Text>
@@ -43,12 +82,12 @@ const DashboardScreen = ({ navigation }) => {
         
         {/* Phase 2: AI Summary Snippet on Card */}
         <View style={styles.aiSnippetBox}>
-          <Text style={styles.aiSnippetText}>🤖 AI: {item.aiSummary}</Text>
+          <Text style={styles.aiSnippetText}>ðŸ¤– AI: {item.aiSummary}</Text>
         </View>
 
         <View style={styles.cardFooter}>
           <Text style={styles.viewDetailsText}>Start Consultation / View Record</Text>
-          <Text style={styles.arrowIcon}>➔</Text>
+          <Text style={styles.arrowIcon}>âž”</Text>
         </View>
       </TouchableOpacity>
     );
@@ -59,18 +98,18 @@ const DashboardScreen = ({ navigation }) => {
       {/* Modern Profile Header */}
       <View style={styles.topHeader}>
         <View>
-          <Text style={styles.greeting}>Hello, Dr. Patil 👋</Text>
-          <Text style={styles.subGreeting}>You have 4 patients waiting.</Text>
+          <Text style={styles.greeting}>Hello, {user?.name ? user.name : 'Doctor'}</Text>
+          <Text style={styles.subGreeting}>{patients.length > 0 ? `You have ${patients.length} patients today.` : `No appointments scheduled yet.`}</Text>
         </View>
         <View style={styles.avatarPlaceholder}>
-          <Text style={styles.avatarText}>GP</Text>
+          <Text style={styles.avatarText}>{user?.name ? user.name.charAt(0).toUpperCase() : 'D'}</Text>
         </View>
       </View>
 
       <View style={styles.statsContainer}>
         <TouchableOpacity style={styles.statCard}>
           <Text style={styles.statIcon}>💰</Text>
-          <Text style={styles.statValue}>₹4,250</Text>
+          <Text style={styles.statValue}>₹14,250</Text>
           <Text style={styles.statLabel}>Today's Earnings</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.statCard}>
@@ -101,6 +140,16 @@ const DashboardScreen = ({ navigation }) => {
         renderItem={renderPatientCard}
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
+        ListEmptyComponent={() => (
+          <View style={{flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40}}>
+            <Text style={{color: '#666', fontSize: 16, textAlign: 'center'}}>
+              No patients scheduled yet.
+            </Text>
+            <Text style={{color: '#999', fontSize: 14, textAlign: 'center', marginTop: 10}}>
+              Wait for the patient app to book appointments.
+            </Text>
+          </View>
+        )}
       />
     </View>
   );
@@ -164,3 +213,4 @@ const styles = StyleSheet.create({
 });
 
 export default DashboardScreen;
+

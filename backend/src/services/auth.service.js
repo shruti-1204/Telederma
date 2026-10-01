@@ -11,14 +11,45 @@ const generateOtp = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
-const sendOtp = async (phone) => {
-  const otp = env.NODE_ENV === "development" ? env.DEV_OTP : generateOtp();
+const axios = require("axios");
+
+const sendOtp = async (phone, isLogin) => {
+  // --- Check if user exists for Login / Register Logic ---
+  if (typeof isLogin === 'boolean') {
+    const existingUser = await prisma.user.findUnique({ where: { phone } });
+    if (isLogin && !existingUser) {
+      throw new BadRequestError("This mobile number is not registered. Please Register first.");
+    }
+    if (!isLogin && existingUser) {
+      throw new BadRequestError("This mobile number is already registered. Please Login.");
+    }
+  }
+
+  // Always generate a random OTP for WhatsApp (even in dev, to see the magic!)
+  const otp = generateOtp();
   const redisKey = `otp:${phone}`;
   await redis.set(redisKey, otp, "EX", OTP_TTL);
 
-  // In production, integrate SMS provider (Twilio / Fast2SMS / AWS SNS) here
-  if (env.NODE_ENV === "development") {
-    console.log(`[DEV OTP] Phone: ${phone}, OTP: ${otp}`);
+  console.log(`[DEV OTP] Phone: ${phone}, OTP: ${otp}`);
+
+  // --- Send Live WhatsApp OTP via Ultramsg ---
+  try {
+    const instanceId = 'instance193175';
+    const token = '4qv23u43om8ujbnw';
+    
+    // Ensure phone number has country code for WhatsApp API
+    const formattedPhone = phone.startsWith('+91') ? phone : `+91${phone}`;
+    
+    await axios.post(`https://api.ultramsg.com/${instanceId}/messages/chat`, {
+      token: token,
+      to: formattedPhone,
+      body: `*Telederma Verification*\n\nYour Doctor Portal OTP is: *${otp}*\n\n_Valid for 5 minutes. Do not share this with anyone._`
+    }, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    });
+    console.log(`[WhatsApp] OTP Successfully sent to ${formattedPhone}`);
+  } catch (err) {
+    console.error(`[WhatsApp Error] Failed to send OTP:`, err.message);
   }
 
   await createAuditLog({
@@ -30,7 +61,7 @@ const sendOtp = async (phone) => {
   return {
     phone,
     expiresIn: OTP_TTL,
-    // Provide devOtp only in development mode for easy testing
+    // Return devOtp in response for fallback testing
     ...(env.NODE_ENV === "development" && { devOtp: otp }),
   };
 };

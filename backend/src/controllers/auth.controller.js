@@ -3,7 +3,8 @@ const { sendSuccess } = require("../utils/response");
 
 const sendOtp = async (req, res, next) => {
   try {
-    const result = await authService.sendOtp(req.body.phone);
+    const { phone, isLogin } = req.body;
+    const result = await authService.sendOtp(phone, isLogin);
     return sendSuccess(res, "OTP sent successfully", result);
   } catch (err) {
     return next(err);

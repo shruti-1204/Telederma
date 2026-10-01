@@ -3,6 +3,7 @@ const { z } = require("zod");
 const sendOtpSchema = {
   body: z.object({
     phone: z.string().min(10, "Phone number must be at least 10 digits").max(15, "Phone number too long"),
+    isLogin: z.boolean().optional(),
   }),
 };
 

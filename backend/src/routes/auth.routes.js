@@ -9,7 +9,9 @@ const {
   verifyOtpSchema,
   refreshTokenSchema,
 } = require("../validators/auth.validator");
+const { checkUserExists } = require("../controllers/check.controller");
 
+router.post("/check-user", checkUserExists);
 router.post("/send-otp", authLimiter, validate(sendOtpSchema), authController.sendOtp);
 router.post("/verify-otp", authLimiter, validate(verifyOtpSchema), authController.verifyOtp);
 router.post("/refresh", validate(refreshTokenSchema), authController.refresh);

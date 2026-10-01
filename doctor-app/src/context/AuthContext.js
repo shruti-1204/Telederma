@@ -23,31 +23,36 @@ export const AuthProvider = ({ children }) => {
     checkLoginStatus();
   }, []);
 
-  const login = async (mobile, otp) => {
+  // Real backend Login function
+  const login = async (phone, otp, role = 'DOCTOR') => {
     setIsLoading(true);
-    
-    // --- TEMPORARY UI BYPASS (Since Mayuri's backend is not running locally right now) ---
-    setTimeout(async () => {
-      const fakeToken = "dummy-dev-token-123";
-      setDoctorToken(fakeToken);
-      await AsyncStorage.setItem('doctorToken', fakeToken);
-      setIsLoading(false);
-    }, 800); // Wait 0.8 seconds to simulate network, then let you in!
-
-    /* === REAL CODE (Commented out until we connect to backend) ===
     try {
-      const response = await api.post('/auth/verify-otp', { mobile, otp, role: 'DOCTOR' });
-      const token = response.data.token;
+      // Hit real backend
+      const response = await api.post('/auth/verify-otp', { phone, otp, role });
       
-      setDoctorToken(token);
-      await AsyncStorage.setItem('doctorToken', token);
-      console.log('Login successful');
+      const token = response.data.data?.accessToken; // Adjust based on Mayuri's API response structure
+      
+      if (token) {
+        setDoctorToken(token);
+        await AsyncStorage.setItem('doctorToken', token);
+        console.log('Login successful');
+        return { success: true };
+      } else {
+        alert('Invalid response from server.');
+        return { success: false };
+      }
     } catch (error) {
-      console.error('Login failed', error);
-      alert('Login Failed. Please check your OTP.');
+      console.error('Login failed', error.response?.data || error);
+      alert(error.response?.data?.message || 'Login Failed. Please check your OTP.');
+      return { success: false };
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
-    =============================================================== */
+  };
+
+  const setManualToken = async (token) => {
+    setDoctorToken(token);
+    await AsyncStorage.setItem('doctorToken', token);
   };
 
   const logout = async () => {
@@ -56,7 +61,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ login, logout, doctorToken, isLoading }}>
+    <AuthContext.Provider value={{ login, logout, doctorToken, isLoading, setManualToken }}>
       {children}
     </AuthContext.Provider>
   );
