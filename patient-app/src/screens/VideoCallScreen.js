@@ -18,7 +18,7 @@ export default function VideoCallScreen({ navigation, route }) {
   const appointment = route?.params?.appointment;
   const doctorName = appointment?.doctorName || 'Dr. Sarah Jenkins';
   const doctorSpec = appointment?.doctorSpecialization || 'Clinical Dermatology';
-  const roomId = appointment?.meetRoomId || (appointment?.id ? `room_${appointment.id}` : 'td-room-live');
+  const roomId = appointment?.id ? `room_${appointment.id}` : 'td-room-live';
   const consultationId = appointment?.consultationId || appointment?.id;
 
   const [isMuted, setIsMuted] = useState(false);

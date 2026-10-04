@@ -274,7 +274,7 @@ export default function WhatsAppOTPScreen({ navigation, route }) {
               activeOpacity={0.7}
             >
               <Text style={styles.testCodeText}>
-                💡 <Text style={{ fontWeight: '700' }}>Demo/Test WhatsApp Code:</Text> 123456 (Tap to autofill)
+
               </Text>
             </TouchableOpacity>
 

@@ -123,7 +123,7 @@ const DashboardScreen = ({ navigation }) => {
         <View style={styles.cardHeader}>
           <View style={{ flex: 1 }}>
             <Text style={styles.patientName}>{item.name}</Text>
-            <Text style={styles.patientInfo}>{item.category}  â€¢  {item.time}</Text>
+            <Text style={styles.patientInfo}>{item.category}  •  {item.time}</Text>
           </View>
           <View style={[styles.triageBadge, { backgroundColor: colors.bg }]}>
             <Text style={[styles.triageText, { color: colors.text }]}>{item.triage}</Text>
@@ -132,12 +132,12 @@ const DashboardScreen = ({ navigation }) => {
         
         {/* Phase 2: AI Summary Snippet on Card */}
         <View style={styles.aiSnippetBox}>
-          <Text style={styles.aiSnippetText}>ðŸ¤– AI: {item.aiSummary}</Text>
+          <Text style={styles.aiSnippetText}>🤖 AI: {item.aiSummary}</Text>
         </View>
 
         <View style={styles.cardFooter}>
           <Text style={styles.viewDetailsText}>Start Consultation / View Record</Text>
-          <Text style={styles.arrowIcon}>âž”</Text>
+          <Text style={styles.arrowIcon}>➔</Text>
         </View>
       </TouchableOpacity>
     );

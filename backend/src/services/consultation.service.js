@@ -32,7 +32,7 @@ const createConsultation = async ({ appointmentId, user }) => {
     return appointment.consultation;
   }
 
-  const roomId = generateRoomId();
+  const roomId = `room_${appointmentId}`;
 
   const consultation = await prisma.consultation.create({
     data: {

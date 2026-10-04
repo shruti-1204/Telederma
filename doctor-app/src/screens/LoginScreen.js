@@ -31,7 +31,7 @@ const LoginScreen = () => {
     try {
       const res = await api.post('/auth/send-otp', { phone: cleanPhone, isLogin });
       setOtpSent(true);
-      setStatusMessage('✓ OTP sent to your WhatsApp! (Dev test code: 123456)');
+      setStatusMessage('✓ OTP sent to your WhatsApp! ');
     } catch (e) {
       const msg = e.response?.data?.message || 'Failed to send OTP';
       setErrorMessage(msg);
@@ -100,7 +100,7 @@ const LoginScreen = () => {
       setStatusMessage('✓ NMC Verified! Sending OTP to your WhatsApp...');
       await api.post('/auth/send-otp', { phone: cleanPhone, isLogin: false });
       setOtpSent(true);
-      setStatusMessage('✓ NMC Verified! OTP sent to WhatsApp (Dev test code: 123456)');
+      setStatusMessage('✓ NMC Verified! OTP sent to WhatsApp ');
     } catch (error) {
       setErrorMessage(error.response?.data?.message || 'Verification Failed. Please check your details.');
       setStatusMessage('');

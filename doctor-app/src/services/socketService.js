@@ -1,7 +1,7 @@
-import { Platform } from 'react-native';
+﻿import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const LOCAL_IP = '192.168.0.104';
+const LOCAL_IP = '192.168.0.106';
 const PORT = '5000';
 
 const getHost = () => {
@@ -11,10 +11,7 @@ const getHost = () => {
   return LOCAL_IP;
 };
 
-const WS_URL =
-  Platform.OS === 'web'
-    ? `ws://${getHost()}:${PORT}`
-    : `ws://${LOCAL_IP}:${PORT}`;
+const WS_URL = `ws://${LOCAL_IP}:${PORT}`;
 
 class DoctorSocketService {
   constructor() {
@@ -141,3 +138,7 @@ class DoctorSocketService {
 }
 
 export const socketService = new DoctorSocketService();
+
+
+
+

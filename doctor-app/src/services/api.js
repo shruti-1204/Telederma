@@ -1,8 +1,8 @@
-import axios from 'axios';
+﻿import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
-const LOCAL_IP = '192.168.0.104';
+const LOCAL_IP = '192.168.0.106';
 const PORT = '5000';
 
 const getHost = () => {
@@ -45,3 +45,4 @@ api.interceptors.response.use(
 );
 
 export default api;
+

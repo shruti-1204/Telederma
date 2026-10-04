@@ -39,7 +39,7 @@ const PatientDetailScreen = ({ route, navigation }) => {
       navigation.navigate('VideoCall', {
         patient,
         consultationId: consultation.id,
-        roomId: sessionData?.roomId || consultation.roomId || `room_${patient.id}`,
+        roomId: `room_${patient.id}`,
         sessionData,
       });
     } catch (err) {
