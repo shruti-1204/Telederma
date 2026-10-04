@@ -27,3 +27,4 @@ src/generated/
 # Build artifacts
 dist/
 build/
+.expo/

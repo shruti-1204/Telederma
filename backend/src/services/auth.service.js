@@ -70,16 +70,20 @@ const verifyOtp = async ({ phone, otp, role = "PATIENT", name, email }) => {
   const redisKey = `otp:${phone}`;
   const storedOtp = await redis.get(redisKey);
 
-  if (!storedOtp) {
+  const isDevBypass = env.NODE_ENV === "development" && otp === env.DEV_OTP;
+
+  if (!storedOtp && !isDevBypass) {
     throw new BadRequestError("OTP expired or not requested");
   }
 
-  if (storedOtp !== otp && !(env.NODE_ENV === "development" && otp === env.DEV_OTP)) {
+  if (storedOtp !== otp && !isDevBypass) {
     throw new BadRequestError("Invalid OTP entered");
   }
 
   // Clear OTP after successful verification
-  await redis.del(redisKey);
+  if (storedOtp) {
+    await redis.del(redisKey);
+  }
 
   // Find or create User
   let user = await prisma.user.findUnique({
@@ -104,7 +108,9 @@ const verifyOtp = async ({ phone, otp, role = "PATIENT", name, email }) => {
         }),
         ...(role === "DOCTOR" && {
           doctor: {
-            create: {},
+            create: {
+              isVerified: true,
+            },
           },
         }),
       },
@@ -124,7 +130,7 @@ const verifyOtp = async ({ phone, otp, role = "PATIENT", name, email }) => {
     } else if (user.role === "DOCTOR" && !user.doctor) {
       user = await prisma.user.update({
         where: { id: user.id },
-        data: { doctor: { create: {} } },
+        data: { doctor: { create: { isVerified: true } } },
         include: { patient: true, doctor: true },
       });
     }

@@ -1,5 +1,10 @@
 const prescriptionService = require("../services/prescription.service");
 const { sendSuccess } = require("../utils/response");
+const {
+  emitToPatient,
+  emitToUser,
+  emitToRoom,
+} = require("../services/websocket.service");
 
 const createPrescription = async (req, res, next) => {
   try {
@@ -10,6 +15,16 @@ const createPrescription = async (req, res, next) => {
       items: req.body.items,
       doctorUser: req.user,
     });
+
+    // Real-Time Notification: Push new prescription directly to the patient in real time!
+    emitToPatient(prescription.patientId, "prescription:new", prescription);
+    if (prescription.patient?.user?.id) {
+      emitToUser(prescription.patient.user.id, "prescription:new", prescription);
+    }
+    if (prescription.consultation?.roomId) {
+      emitToRoom(prescription.consultation.roomId, "prescription:new", prescription);
+    }
+
     return sendSuccess(res, "Prescription created successfully", prescription, 201);
   } catch (err) {
     return next(err);

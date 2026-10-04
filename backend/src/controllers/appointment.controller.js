@@ -1,5 +1,11 @@
 const appointmentService = require("../services/appointment.service");
 const { sendSuccess } = require("../utils/response");
+const {
+  emitToDoctor,
+  emitToPatient,
+  emitToUser,
+  emitToRole,
+} = require("../services/websocket.service");
 
 const createAppointment = async (req, res, next) => {
   try {
@@ -10,6 +16,14 @@ const createAppointment = async (req, res, next) => {
       slotEnd: req.body.slotEnd,
       userId: req.user.userId,
     });
+
+    // Real-Time Notification: Push new appointment to the doctor immediately
+    emitToDoctor(appointment.doctorId, "appointment:new", appointment);
+    emitToRole("DOCTOR", "appointment:new", appointment);
+    if (appointment.doctor?.user?.id) {
+      emitToUser(appointment.doctor.user.id, "appointment:new", appointment);
+    }
+
     return sendSuccess(res, "Appointment booked successfully", appointment, 201);
   } catch (err) {
     return next(err);
@@ -44,6 +58,11 @@ const cancelAppointment = async (req, res, next) => {
       "CANCELLED",
       req.user
     );
+
+    // Real-Time Notification
+    emitToPatient(cancelled.patientId, "appointment:cancelled", cancelled);
+    emitToDoctor(cancelled.doctorId, "appointment:cancelled", cancelled);
+
     return sendSuccess(res, "Appointment cancelled", cancelled);
   } catch (err) {
     return next(err);
@@ -57,6 +76,13 @@ const confirmAppointment = async (req, res, next) => {
       "CONFIRMED",
       req.user
     );
+
+    // Real-Time Notification: Inform patient that doctor confirmed appointment
+    emitToPatient(confirmed.patientId, "appointment:confirmed", confirmed);
+    if (confirmed.patient?.user?.id) {
+      emitToUser(confirmed.patient.user.id, "appointment:confirmed", confirmed);
+    }
+
     return sendSuccess(res, "Appointment confirmed", confirmed);
   } catch (err) {
     return next(err);
@@ -70,6 +96,12 @@ const rejectAppointment = async (req, res, next) => {
       "CANCELLED",
       req.user
     );
+
+    emitToPatient(rejected.patientId, "appointment:rejected", rejected);
+    if (rejected.patient?.user?.id) {
+      emitToUser(rejected.patient.user.id, "appointment:rejected", rejected);
+    }
+
     return sendSuccess(res, "Appointment rejected", rejected);
   } catch (err) {
     return next(err);
@@ -83,6 +115,10 @@ const completeAppointment = async (req, res, next) => {
       "COMPLETED",
       req.user
     );
+
+    emitToPatient(completed.patientId, "appointment:completed", completed);
+    emitToDoctor(completed.doctorId, "appointment:completed", completed);
+
     return sendSuccess(res, "Appointment completed", completed);
   } catch (err) {
     return next(err);

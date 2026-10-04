@@ -1,8 +1,18 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
-// IMPORTANT: Your laptop's Wi-Fi IP changed today. It is now 192.168.1.102
-const BASE_URL = 'http://192.168.1.102:5000/api/v1'; 
+const LOCAL_IP = '192.168.0.104';
+const PORT = '5000';
+
+const getHost = () => {
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    return window.location.hostname;
+  }
+  return LOCAL_IP;
+};
+
+export const BASE_URL = `http://${getHost()}:${PORT}/api/v1`;
 
 const api = axios.create({
   baseURL: BASE_URL,

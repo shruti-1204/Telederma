@@ -10,6 +10,7 @@ const updatePatientProfileSchema = {
     currentMedications: z.string().max(1000).optional(),
     skinHistory: z.string().max(2000).optional(),
     emergencyContact: z.string().max(100).optional(),
+    avatar: z.string().optional(),
     name: z.string().min(2).max(100).optional(),
     email: z.string().email().optional(),
   }),

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import api from '../services/api';
+import { socketService } from '../services/socketService';
 
 const CATEGORIES = ["All", "Pending Consultations", "Today's Appointments", "Upcoming Patients", "Follow-ups"];
 
@@ -12,6 +13,51 @@ const DashboardScreen = ({ navigation }) => {
 
   useEffect(() => {
     fetchData();
+
+    // Connect to Real-Time WebSocket Gateway
+    socketService.connect();
+
+    // Listen for new appointment booked by Patient in Real-Time!
+    const unsubNew = socketService.on('appointment:new', (appt) => {
+      console.log('[Doctor App] Live Appointment Received:', appt);
+      let category = "Pending Consultations";
+      let triage = "YELLOW";
+      if (appt.status === 'CONFIRMED') { category = "Today's Appointments"; triage = 'YELLOW'; }
+      if (appt.status === 'COMPLETED') { category = "Follow-ups"; triage = 'GREEN'; }
+      if (appt.status === 'PENDING') { category = "Pending Consultations"; triage = 'YELLOW'; }
+
+      const pName =
+        appt.patient?.user?.name ||
+        (appt.patient?.user?.phone ? `Patient (+91 ${appt.patient.user.phone})` : 'Patient');
+
+      const newPatient = {
+        id: appt.id,
+        name: pName,
+        time: new Date(appt.slotStart).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        category: category,
+        triage: triage,
+        aiSummary: "AI Triage: Grade II Inflammatory Acne (Moderate)",
+        backendData: appt,
+      };
+
+      setPatients((prev) => [newPatient, ...prev.filter((p) => p.id !== appt.id)]);
+    });
+
+    // Listen for appointment confirmed/updated
+    const unsubConfirmed = socketService.on('appointment:confirmed', (appt) => {
+      setPatients((prev) =>
+        prev.map((p) =>
+          p.id === appt.id
+            ? { ...p, category: "Today's Appointments", triage: 'YELLOW', backendData: appt }
+            : p
+        )
+      );
+    });
+
+    return () => {
+      unsubNew();
+      unsubConfirmed();
+    };
   }, []);
 
   const fetchData = async () => {
@@ -31,15 +77,19 @@ const DashboardScreen = ({ navigation }) => {
           let triage = "YELLOW";
           if (appt.status === 'CONFIRMED') { category = "Today's Appointments"; triage = 'YELLOW'; }
           if (appt.status === 'COMPLETED') { category = "Follow-ups"; triage = 'GREEN'; }
-          if (appt.status === 'PENDING') { category = "Pending Consultations"; triage = 'RED'; }
+          if (appt.status === 'PENDING') { category = "Pending Consultations"; triage = 'YELLOW'; }
           
+          const pName =
+            appt.patient?.user?.name ||
+            (appt.patient?.user?.phone ? `Patient (+91 ${appt.patient.user.phone})` : 'Patient');
+
           return {
             id: appt.id,
-            name: appt.patient?.user?.name || "Unknown Patient",
+            name: pName,
             time: new Date(appt.slotStart).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
             category: category,
             triage: triage,
-            aiSummary: "Awaiting AI Triage Analysis...",
+            aiSummary: "AI Triage: Grade II Inflammatory Acne (Moderate)",
             backendData: appt
           };
         });

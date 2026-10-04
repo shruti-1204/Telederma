@@ -5,11 +5,7 @@ const { Pool } = require('pg');
 const { PrismaPg } = require("@prisma/adapter-pg");
 
 const pool = new Pool({
-  user: 'postgres',
-  password: '123456',
-  host: 'localhost',
-  port: 5432,
-  database: 'telederma'
+  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:krishna@localhost:5432/telederma',
 });
 
 const adapter = new PrismaPg(pool);

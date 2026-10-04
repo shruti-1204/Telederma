@@ -7,7 +7,7 @@ const getPatientByUserId = async (userId) => {
     where: { userId },
     include: {
       user: {
-        select: { id: true, phone: true, email: true, name: true, role: true, status: true },
+        select: { id: true, phone: true, email: true, name: true, avatar: true, role: true, status: true },
       },
     },
   });
@@ -17,7 +17,7 @@ const getPatientByUserId = async (userId) => {
       data: { userId },
       include: {
         user: {
-          select: { id: true, phone: true, email: true, name: true, role: true, status: true },
+          select: { id: true, phone: true, email: true, name: true, avatar: true, role: true, status: true },
         },
       },
     });
@@ -31,13 +31,14 @@ const updatePatientProfile = async (userId, updateData) => {
 
   const { name, email, dateOfBirth, ...patientFields } = updateData;
 
-  // Update user name/email if provided
-  if (name || email) {
+  // Update user name/email/avatar if provided
+  if (name || email || updateData.avatar) {
     await prisma.user.update({
       where: { id: userId },
       data: {
         ...(name && { name }),
         ...(email && { email }),
+        ...(updateData.avatar && { avatar: updateData.avatar }),
       },
     });
   }
@@ -50,7 +51,7 @@ const updatePatientProfile = async (userId, updateData) => {
     },
     include: {
       user: {
-        select: { id: true, phone: true, email: true, name: true, role: true, status: true },
+        select: { id: true, phone: true, email: true, name: true, avatar: true, role: true, status: true },
       },
     },
   });

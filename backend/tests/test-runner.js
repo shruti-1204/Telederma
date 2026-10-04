@@ -95,15 +95,16 @@ const runTests = async () => {
 
     // 3. Auth Flow - Doctor
     const doctorPhone = `9800000002`;
-    await request(baseUrl, "/api/v1/auth/send-otp", {
+    const resSendDoctor = await request(baseUrl, "/api/v1/auth/send-otp", {
       method: "POST",
       body: JSON.stringify({ phone: doctorPhone }),
     });
+    const doctorDevOtp = resSendDoctor.data.data?.devOtp || "123456";
     const resVerifyDoctor = await request(baseUrl, "/api/v1/auth/verify-otp", {
       method: "POST",
       body: JSON.stringify({
         phone: doctorPhone,
-        otp: devOtp,
+        otp: doctorDevOtp,
         role: "DOCTOR",
         name: "Dr. Sarah Jenkins",
         email: "dr.sarah@telederma.org",
@@ -115,15 +116,16 @@ const runTests = async () => {
 
     // 4. Auth Flow - Admin
     const adminPhone = `9800000003`;
-    await request(baseUrl, "/api/v1/auth/send-otp", {
+    const resSendAdmin = await request(baseUrl, "/api/v1/auth/send-otp", {
       method: "POST",
       body: JSON.stringify({ phone: adminPhone }),
     });
+    const adminDevOtp = resSendAdmin.data.data?.devOtp || "123456";
     const resVerifyAdmin = await request(baseUrl, "/api/v1/auth/verify-otp", {
       method: "POST",
       body: JSON.stringify({
         phone: adminPhone,
-        otp: devOtp,
+        otp: adminDevOtp,
         role: "ADMIN",
         name: "Platform Administrator",
         email: "admin@telederma.org",

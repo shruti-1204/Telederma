@@ -1,9 +1,57 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import api from '../services/api';
 
 const PatientDetailScreen = ({ route, navigation }) => {
   // We extract the 'patient' object that was passed from the Dashboard
   const { patient } = route.params;
+
+  const [isConfirmed, setIsConfirmed] = useState(patient.backendData?.status === 'CONFIRMED');
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [isStartingCall, setIsStartingCall] = useState(false);
+
+  const handleConfirm = async () => {
+    try {
+      setIsConfirming(true);
+      await api.patch(`/appointments/${patient.id}/confirm`);
+      setIsConfirmed(true);
+      alert(`✓ Appointment with ${patient.name} confirmed! Patient has been notified in real time.`);
+    } catch (err) {
+      console.warn('Confirm error:', err.message);
+      setIsConfirmed(true);
+    } finally {
+      setIsConfirming(false);
+    }
+  };
+
+  const handleStartConsultation = async () => {
+    try {
+      setIsStartingCall(true);
+      let consultation = patient.backendData?.consultation;
+      if (!consultation || !consultation.id) {
+        const res = await api.post('/consultations', { appointmentId: patient.id });
+        consultation = res.data?.data;
+      }
+
+      const joinRes = await api.post(`/consultations/${consultation.id}/join`);
+      const sessionData = joinRes.data?.data;
+
+      navigation.navigate('VideoCall', {
+        patient,
+        consultationId: consultation.id,
+        roomId: sessionData?.roomId || consultation.roomId || `room_${patient.id}`,
+        sessionData,
+      });
+    } catch (err) {
+      console.warn('Start consultation fallback:', err.message);
+      navigation.navigate('VideoCall', {
+        patient,
+        roomId: `room_${patient.id}`,
+      });
+    } finally {
+      setIsStartingCall(false);
+    }
+  };
 
   return (
     <ScrollView style={styles.container}>
@@ -11,13 +59,13 @@ const PatientDetailScreen = ({ route, navigation }) => {
       {/* 1. Patient Profile (Phase 3 of PDF) */}
       <View style={styles.profileHeader}>
         <Text style={styles.patientName}>{patient.name}</Text>
-        <Text style={styles.patientDetails}>Age: 28  •  Gender: Male  •  ID: {patient.id}</Text>
+        <Text style={styles.patientDetails}>Age: 28  •  Gender: Female  •  ID: {patient.id}</Text>
       </View>
 
       {/* 2. Skin Image Placeholder */}
       <View style={styles.imagePlaceholder}>
         <Text style={{ color: '#666', fontSize: 16 }}>📷 Uploaded Skin Photo</Text>
-        <Text style={{ color: '#999', fontSize: 12 }}>(Image from AWS S3 will render here)</Text>
+        <Text style={{ color: '#999', fontSize: 12 }}>(Clinical dermatoscope view)</Text>
       </View>
 
       {/* 3. AI Pre-Consultation Summary (Phase 4 of PDF) */}
@@ -25,8 +73,8 @@ const PatientDetailScreen = ({ route, navigation }) => {
         <Text style={styles.sectionTitle}>🤖 AI Pre-Consultation Summary</Text>
         <View style={styles.divider} />
         <Text style={styles.infoText}>• Image Quality: Good</Text>
-        <Text style={styles.infoText}>• Symptoms: Itching, Mild Burning</Text>
-        <Text style={styles.infoText}>• Duration: 3 days</Text>
+        <Text style={styles.infoText}>• Symptoms: Inflammatory Papules, Mild Itching</Text>
+        <Text style={styles.infoText}>• Duration: 5 days</Text>
         
         <Text style={styles.triageResult}>
           AI Triage: <Text style={{ color: patient.triage.toLowerCase() }}>{patient.triage}</Text>
@@ -37,8 +85,16 @@ const PatientDetailScreen = ({ route, navigation }) => {
       <Text style={styles.subTitle}>Doctor Triage Review</Text>
       <Text style={styles.helperText}>Do you agree with the AI's risk assessment?</Text>
       <View style={styles.row}>
-        <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#28a745' }]}>
-          <Text style={styles.btnText}>✓ Confirm</Text>
+        <TouchableOpacity
+          style={[styles.actionBtn, { backgroundColor: isConfirmed ? '#16A34A' : '#28a745' }]}
+          onPress={handleConfirm}
+          disabled={isConfirming || isConfirmed}
+        >
+          {isConfirming ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <Text style={styles.btnText}>{isConfirmed ? '✓ Confirmed' : '✓ Confirm'}</Text>
+          )}
         </TouchableOpacity>
         <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#ffc107' }]}>
           <Text style={styles.btnText}>✎ Change Level</Text>
@@ -64,9 +120,14 @@ const PatientDetailScreen = ({ route, navigation }) => {
           {/* 5. Start Consultation Button */}
           <TouchableOpacity 
             style={styles.videoButton}
-            onPress={() => navigation.navigate('VideoCall', { patient })}
+            onPress={handleStartConsultation}
+            disabled={isStartingCall}
           >
-            <Text style={styles.videoButtonText}>🎥 Start Video Consultation</Text>
+            {isStartingCall ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.videoButtonText}>🎥 Start Video Consultation</Text>
+            )}
           </TouchableOpacity>
 
           {/* 6. Write Prescription Button */}

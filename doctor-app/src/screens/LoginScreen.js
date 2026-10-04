@@ -11,6 +11,8 @@ const LoginScreen = () => {
   const [otp, setOtp] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [sendingOtp, setSendingOtp] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [statusMessage, setStatusMessage] = useState('');
 
   // Registration specific fields
   const [docName, setDocName] = useState('');
@@ -18,81 +20,110 @@ const LoginScreen = () => {
   const [isVerifying, setIsVerifying] = useState(false);
 
   const requestOtp = async (isLogin) => {
-    if (!phone) return alert('Please enter phone number');
+    setErrorMessage('');
+    setStatusMessage('');
+    const cleanPhone = phone.trim().replace(/\s+/g, '');
+    if (!cleanPhone) {
+      setErrorMessage('Please enter your mobile number');
+      return;
+    }
     setSendingOtp(true);
     try {
-      await api.post('/auth/send-otp', { phone, isLogin });
+      const res = await api.post('/auth/send-otp', { phone: cleanPhone, isLogin });
       setOtpSent(true);
-      Alert.alert('Success', 'OTP Sent successfully to your WhatsApp!');
+      setStatusMessage('✓ OTP sent to your WhatsApp! (Dev test code: 123456)');
     } catch (e) {
-      Alert.alert('Error', e.response?.data?.message || 'Failed to send OTP');
+      const msg = e.response?.data?.message || 'Failed to send OTP';
+      setErrorMessage(msg);
+      if (typeof window !== 'undefined' && window.alert) {
+        window.alert(msg);
+      }
     } finally {
       setSendingOtp(false);
     }
   };
 
   const handleLoginSubmit = () => {
-    if (phone && otp) {
-      login(phone, otp);
+    setErrorMessage('');
+    const cleanPhone = phone.trim().replace(/\s+/g, '');
+    if (cleanPhone && otp) {
+      login(cleanPhone, otp.trim());
     } else {
-      alert('Please enter OTP');
+      setErrorMessage('Please enter OTP');
     }
   };
 
   const handleRegisterSubmit = async () => {
-    if (!docName || !regId || !phone) {
-      alert('Please fill all details: Name, NMC ID, and Phone');
+    setErrorMessage('');
+    setStatusMessage('');
+    const cleanPhone = phone.trim().replace(/\s+/g, '');
+    const cleanName = docName.trim();
+    const cleanRegId = regId.trim();
+
+    if (!cleanName || !cleanRegId || !cleanPhone) {
+      setErrorMessage('Please fill all details: Name, NMC ID, and Phone');
       return;
     }
 
     setIsVerifying(true);
+    setStatusMessage('Checking records & verifying NMC credentials...');
     try {
       // 0. Pre-check: Does user already exist by Phone OR Name?
-      const checkRes = await api.post('/auth/check-user', { phone, name: docName });
+      const checkRes = await api.post('/auth/check-user', { phone: cleanPhone, name: cleanName });
       if (checkRes.data.exists) {
         if (checkRes.data.reason === 'phone') {
-          Alert.alert('User Exists', 'This mobile number is already registered! Please login.');
+          setErrorMessage('This mobile number is already registered! Please switch to Login tab.');
         } else {
-          Alert.alert('User Exists', 'A doctor with this name is already registered! Please login.');
+          setErrorMessage('A doctor with this name is already registered! Please switch to Login tab.');
         }
         setIsVerifying(false);
+        setStatusMessage('');
         return;
       }
 
       // 1. Web Scraping Verification
       const verifyRes = await api.post('/verification/verify', {
-        expectedName: docName,
-        registrationNumber: regId
+        expectedName: cleanName,
+        registrationNumber: cleanRegId
       });
       
-      const { status } = verifyRes.data.verificationResult;
+      const { status } = verifyRes.data?.verificationResult || {};
       
       if (status !== 'VERIFIED ACTIVE PRACTITIONER') {
-        Alert.alert('❌ CREDENTIAL MISMATCH', 'Registration failed. Your details do not match NMC records.');
+        setErrorMessage('❌ CREDENTIAL MISMATCH: Registration failed. Your details do not match NMC records.');
         setIsVerifying(false);
+        setStatusMessage('');
         return;
       }
 
       // 2. If verified, send OTP
-      await requestOtp(false);
-
+      setStatusMessage('✓ NMC Verified! Sending OTP to your WhatsApp...');
+      await api.post('/auth/send-otp', { phone: cleanPhone, isLogin: false });
+      setOtpSent(true);
+      setStatusMessage('✓ NMC Verified! OTP sent to WhatsApp (Dev test code: 123456)');
     } catch (error) {
-      Alert.alert('Error', error.response?.data?.message || 'Verification Failed');
+      setErrorMessage(error.response?.data?.message || 'Verification Failed. Please check your details.');
+      setStatusMessage('');
     } finally {
       setIsVerifying(false);
     }
   };
 
   const handleRegisterOtpSubmit = async () => {
-    if (!otp) return alert('Enter OTP');
+    setErrorMessage('');
+    const cleanPhone = phone.trim().replace(/\s+/g, '');
+    if (!otp) {
+      setErrorMessage('Please enter the 6-digit OTP');
+      return;
+    }
     
     // We call login from context which internally calls verify-otp and saves token
-    const res = await login(phone, otp, 'DOCTOR');
+    const res = await login(cleanPhone, otp.trim(), 'DOCTOR');
     
     if (res && res.success) {
       try {
         // Once token is saved, update the profile with License Number (NMC ID)
-        await api.put('/doctors/me', { licenseNumber: regId, name: docName });
+        await api.put('/doctors/me', { licenseNumber: regId.trim(), name: docName.trim() });
       } catch (err) {
         console.error('Failed to update doctor profile', err);
       }
@@ -116,6 +147,19 @@ const LoginScreen = () => {
       {!isRegisterMode ? (
         <View style={styles.card}>
           <Text style={styles.subtitle}>Welcome Back</Text>
+
+          {errorMessage ? (
+            <View style={{ backgroundColor: '#FEE2E2', borderWidth: 1, borderColor: '#EF4444', borderRadius: 8, padding: 10, marginBottom: 12 }}>
+              <Text style={{ color: '#B91C1C', fontSize: 13, fontWeight: '700', textAlign: 'center' }}>⚠️ {errorMessage}</Text>
+            </View>
+          ) : null}
+
+          {statusMessage ? (
+            <View style={{ backgroundColor: '#D1FAE5', borderWidth: 1, borderColor: '#10B981', borderRadius: 8, padding: 10, marginBottom: 12 }}>
+              <Text style={{ color: '#065F46', fontSize: 13, fontWeight: '700', textAlign: 'center' }}>{statusMessage}</Text>
+            </View>
+          ) : null}
+
           <TextInput 
             style={styles.input}
             placeholder="Enter Registered Mobile Number"
@@ -149,6 +193,18 @@ const LoginScreen = () => {
         <View style={styles.card}>
           <Text style={styles.subtitle}>New Doctor Registration</Text>
           <Text style={styles.hint}>Complete NMC Verification to create an account.</Text>
+
+          {errorMessage ? (
+            <View style={{ backgroundColor: '#FEE2E2', borderWidth: 1, borderColor: '#EF4444', borderRadius: 8, padding: 10, marginVertical: 12 }}>
+              <Text style={{ color: '#B91C1C', fontSize: 13, fontWeight: '700', textAlign: 'center' }}>⚠️ {errorMessage}</Text>
+            </View>
+          ) : null}
+
+          {statusMessage ? (
+            <View style={{ backgroundColor: '#D1FAE5', borderWidth: 1, borderColor: '#10B981', borderRadius: 8, padding: 10, marginVertical: 12 }}>
+              <Text style={{ color: '#065F46', fontSize: 13, fontWeight: '700', textAlign: 'center' }}>{statusMessage}</Text>
+            </View>
+          ) : null}
 
           <TextInput 
             style={styles.input}

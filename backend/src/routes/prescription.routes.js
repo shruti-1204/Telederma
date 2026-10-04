@@ -17,6 +17,12 @@ router.post(
 );
 
 router.get(
+  "/",
+  requireAuth,
+  prescriptionController.getMyPrescriptions
+);
+
+router.get(
   "/:prescriptionId",
   requireAuth,
   validate(prescriptionIdParamSchema),

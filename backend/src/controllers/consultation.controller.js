@@ -1,5 +1,11 @@
 const consultationService = require("../services/consultation.service");
 const { sendSuccess } = require("../utils/response");
+const {
+  emitToRoom,
+  emitToUser,
+  emitToPatient,
+  emitToDoctor,
+} = require("../services/websocket.service");
 
 const createConsultation = async (req, res, next) => {
   try {
@@ -7,6 +13,11 @@ const createConsultation = async (req, res, next) => {
       appointmentId: req.body.appointmentId,
       user: req.user,
     });
+
+    // Notify peers that a consultation session is ready
+    emitToPatient(consultation.patientId, "consultation:ready", consultation);
+    emitToDoctor(consultation.doctorId, "consultation:ready", consultation);
+
     return sendSuccess(res, "Consultation session ready", consultation, 201);
   } catch (err) {
     return next(err);
@@ -31,6 +42,14 @@ const joinConsultation = async (req, res, next) => {
       req.params.consultationId,
       req.user
     );
+
+    // Real-Time Notification: inform peer that user joined the room
+    emitToRoom(sessionData.roomId, "consultation:peer-joined", {
+      consultationId: sessionData.consultationId,
+      roomId: sessionData.roomId,
+      peer: sessionData.peerIdentity,
+    });
+
     return sendSuccess(res, "Joined consultation session", sessionData);
   } catch (err) {
     return next(err);
@@ -43,6 +62,15 @@ const endConsultation = async (req, res, next) => {
       req.params.consultationId,
       req.user
     );
+
+    // Notify room and both users that consultation has completed
+    emitToRoom(consultation.roomId, "consultation:ended", {
+      consultationId: consultation.id,
+      status: "COMPLETED",
+    });
+    emitToPatient(consultation.patientId, "consultation:ended", consultation);
+    emitToDoctor(consultation.doctorId, "consultation:ended", consultation);
+
     return sendSuccess(res, "Consultation session ended", consultation);
   } catch (err) {
     return next(err);
