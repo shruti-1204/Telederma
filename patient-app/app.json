@@ -7,15 +7,28 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.telederma.patient",
+      "infoPlist": {
+        "NSCameraUsageDescription": "TeleDerma needs access to your camera for live dermatology video consultations.",
+        "NSMicrophoneUsageDescription": "TeleDerma needs access to your microphone to speak with your dermatologist during consultations."
+      }
     },
     "android": {
+      "package": "com.telederma.patient",
       "adaptiveIcon": {
         "backgroundColor": "#0B6B6B",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
-      }
+      },
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS",
+        "ACCESS_NETWORK_STATE",
+        "INTERNET"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"

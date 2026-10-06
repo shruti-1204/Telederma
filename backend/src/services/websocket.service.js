@@ -260,6 +260,19 @@ const handleClientMessage = (ws, message) => {
       break;
     }
 
+    // WebRTC Official End Call (terminates call for all participants in room)
+    case "webrtc:end-call": {
+      const roomId = payload?.roomId;
+      if (roomId) {
+        emitToRoom(roomId, "consultation:ended", {
+          roomId,
+          endedBy: info.userId,
+          role: info.role,
+        });
+      }
+      break;
+    }
+
     // Heartbeat ping
     case "ping": {
       sendToSocket(ws, { type: "pong", payload: { time: Date.now() } });

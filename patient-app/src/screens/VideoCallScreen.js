@@ -7,6 +7,7 @@ import {
   SafeAreaView,
   Alert,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { Colors } from '../theme/colors';
 import { socketService } from '../services/socketService';
@@ -182,26 +183,25 @@ export default function VideoCallScreen({ navigation, route }) {
     }
   };
 
+  const executeEndCall = async () => {
+    try {
+      socketService.endCall(roomId);
+      if (consultationId) {
+        await api.post(`/consultations/${consultationId}/end`).catch(() => {});
+      }
+    } catch (e) {
+      console.log('Patient end call notice:', e.message);
+    } finally {
+      if (webrtcRef.current) {
+        webrtcRef.current.cleanup();
+      }
+      socketService.leaveWebRtcRoom(roomId);
+      setCallEnded(true);
+    }
+  };
+
   const handleEndCall = () => {
-    Alert.alert('End Consultation', 'Are you sure you want to end the video consultation?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'End Call',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            if (consultationId) {
-              await api.post(`/consultations/${consultationId}/end`).catch(() => {});
-            }
-          } catch (e) {}
-          if (webrtcRef.current) {
-            webrtcRef.current.cleanup();
-          }
-          socketService.leaveWebRtcRoom(roomId);
-          setCallEnded(true);
-        },
-      },
-    ]);
+    executeEndCall();
   };
 
   if (callEnded) {
@@ -232,7 +232,13 @@ export default function VideoCallScreen({ navigation, route }) {
 
           <TouchableOpacity
             style={styles.backHomeBtn}
-            onPress={() => navigation.navigate('Dashboard')}
+            onPress={() => {
+              if (navigation.canGoBack && navigation.canGoBack()) {
+                navigation.goBack();
+              } else {
+                navigation.navigate('Dashboard');
+              }
+            }}
           >
             <Text style={styles.backHomeBtnText}>Back to Dashboard</Text>
           </TouchableOpacity>
@@ -245,7 +251,16 @@ export default function VideoCallScreen({ navigation, route }) {
     <SafeAreaView style={styles.safe}>
       {/* Top Header Bar */}
       <View style={styles.topHeader}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => {
+            if (navigation.canGoBack && navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              navigation.navigate('Dashboard');
+            }
+          }}
+        >
           <Text style={styles.backBtnText}>✕ Exit Room</Text>
         </TouchableOpacity>
         <View style={styles.liveIndicator}>

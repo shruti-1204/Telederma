@@ -1,17 +1,24 @@
-﻿import { Platform } from 'react-native';
+import { Platform, NativeModules } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const LOCAL_IP = '192.168.0.106';
+const DEFAULT_IP = '192.168.0.104';
 const PORT = '5000';
 
 const getHost = () => {
   if (typeof window !== 'undefined' && window.location?.hostname) {
     return window.location.hostname;
   }
-  return LOCAL_IP;
+  try {
+    const scriptURL = NativeModules?.SourceCode?.scriptURL;
+    if (scriptURL) {
+      const match = scriptURL.match(/^https?:\/\/([^:/]+)/);
+      if (match && match[1]) {
+        return match[1];
+      }
+    }
+  } catch (e) {}
+  return DEFAULT_IP;
 };
-
-const WS_URL = `ws://${LOCAL_IP}:${PORT}`;
 
 class SocketService {
   constructor() {
@@ -31,8 +38,9 @@ class SocketService {
     }
 
     try {
+      const host = getHost();
       const token = (await AsyncStorage.getItem('@telederma_auth_token')) || '';
-      const url = `${WS_URL}?token=${encodeURIComponent(token)}&role=PATIENT`;
+      const url = `ws://${host}:${PORT}?token=${encodeURIComponent(token)}&role=PATIENT`;
 
       this.ws = new WebSocket(url);
 
@@ -135,6 +143,10 @@ class SocketService {
 
   leaveWebRtcRoom(roomId) {
     this.send('webrtc:leave', { roomId });
+  }
+
+  endCall(roomId) {
+    this.send('webrtc:end-call', { roomId });
   }
 
   disconnect() {

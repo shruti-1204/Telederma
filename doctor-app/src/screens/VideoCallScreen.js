@@ -122,12 +122,27 @@ const VideoCallScreen = ({ route, navigation }) => {
           setRemoteStream(null);
         });
 
+        // Socket Event: Consultation officially ended
+        const unsubEnded = socketService.on('consultation:ended', () => {
+          console.log('[DoctorApp] Consultation ended officially');
+          if (webrtcRef.current) {
+            webrtcRef.current.cleanup();
+          }
+          socketService.leaveWebRtcRoom(roomId);
+          if (navigation.canGoBack && navigation.canGoBack()) {
+            navigation.goBack();
+          } else {
+            navigation.navigate('Dashboard');
+          }
+        });
+
         return () => {
           unsubPeerJoined();
           unsubOffer();
           unsubAnswer();
           unsubCandidate();
           unsubPeerLeft();
+          unsubEnded();
         };
       } catch (err) {
         console.error('[DoctorApp] WebRTC startup error:', err);
@@ -164,37 +179,36 @@ const VideoCallScreen = ({ route, navigation }) => {
     }
   };
 
+  const executeEndCall = async () => {
+    try {
+      setIsEndingCall(true);
+      // 1. Broadcast end-call over WebSocket to room
+      socketService.endCall(roomId);
+
+      // 2. Mark consultation / appointment as complete in database
+      if (consultationId) {
+        await api.post(`/consultations/${consultationId}/end`).catch(() => {});
+      } else if (patient?.id) {
+        await api.patch(`/appointments/${patient.id}/complete`).catch(() => {});
+      }
+    } catch (err) {
+      console.log('End call notice:', err.message);
+    } finally {
+      if (webrtcRef.current) {
+        webrtcRef.current.cleanup();
+      }
+      socketService.leaveWebRtcRoom(roomId);
+      setIsEndingCall(false);
+      if (navigation.canGoBack && navigation.canGoBack()) {
+        navigation.goBack();
+      } else {
+        navigation.navigate('Dashboard');
+      }
+    }
+  };
+
   const handleEndCall = () => {
-    Alert.alert('End Consultation', `Conclude consultation with ${patientName}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'End Call & Complete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            setIsEndingCall(true);
-            if (consultationId) {
-              await api.post(`/consultations/${consultationId}/end`);
-            } else if (patient?.id) {
-              await api.patch(`/appointments/${patient.id}/complete`).catch(() => {});
-            }
-          } catch (err) {
-            console.warn('End call notice:', err.message);
-          } finally {
-            if (webrtcRef.current) {
-              webrtcRef.current.cleanup();
-            }
-            socketService.leaveWebRtcRoom(roomId);
-            setIsEndingCall(false);
-            Alert.alert(
-              'Call Ended ✅',
-              `Consultation with ${patientName} has finished and status is marked as COMPLETED.`,
-              [{ text: 'OK', onPress: () => navigation.goBack() }]
-            );
-          }
-        },
-      },
-    ]);
+    executeEndCall();
   };
 
   const handleAddMedicine = () => {

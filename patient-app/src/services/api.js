@@ -1,15 +1,25 @@
-﻿import axios from 'axios';
+import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
+import { NativeModules, Platform } from 'react-native';
 
-const LOCAL_IP = '192.168.0.106';
+const DEFAULT_IP = '192.168.0.104';
 const PORT = '5000';
 
-const getHost = () => {
+export const getHost = () => {
   if (typeof window !== 'undefined' && window.location?.hostname) {
     return window.location.hostname;
   }
-  return LOCAL_IP;
+  // Mobile app: automatically extract host IP from Metro bundle URL
+  try {
+    const scriptURL = NativeModules?.SourceCode?.scriptURL;
+    if (scriptURL) {
+      const match = scriptURL.match(/^https?:\/\/([^:/]+)/);
+      if (match && match[1]) {
+        return match[1];
+      }
+    }
+  } catch (e) {}
+  return DEFAULT_IP;
 };
 
 // Web dynamically matches window.location.hostname, physical mobile devices on Wi-Fi use local network IP
@@ -23,10 +33,14 @@ const api = axios.create({
   },
 });
 
-// Auto-inject JWT access token on every authenticated request
+// Auto-inject JWT access token on every authenticated request and resolve current host dynamically
 api.interceptors.request.use(
   async (config) => {
     try {
+      const host = getHost();
+      if (host) {
+        config.baseURL = `http://${host}:${PORT}/api/v1`;
+      }
       const token = await AsyncStorage.getItem('@telederma_auth_token');
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
@@ -53,4 +67,3 @@ api.interceptors.response.use(
 );
 
 export default api;
-

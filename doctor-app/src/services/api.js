@@ -1,30 +1,47 @@
-﻿import axios from 'axios';
+import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
+import { NativeModules, Platform } from 'react-native';
 
-const LOCAL_IP = '192.168.0.106';
+const DEFAULT_IP = '192.168.0.104';
 const PORT = '5000';
 
-const getHost = () => {
+export const getHost = () => {
   if (typeof window !== 'undefined' && window.location?.hostname) {
     return window.location.hostname;
   }
-  return LOCAL_IP;
+  try {
+    const scriptURL = NativeModules?.SourceCode?.scriptURL;
+    if (scriptURL) {
+      const match = scriptURL.match(/^https?:\/\/([^:/]+)/);
+      if (match && match[1]) {
+        return match[1];
+      }
+    }
+  } catch (e) {}
+  return DEFAULT_IP;
 };
 
 export const BASE_URL = `http://${getHost()}:${PORT}/api/v1`;
 
 const api = axios.create({
   baseURL: BASE_URL,
+  timeout: 15000,
 });
 
-// Interceptor to attach JWT token to every request automatically
+// Interceptor to attach JWT token to every request automatically and resolve current host dynamically
 api.interceptors.request.use(
   async (config) => {
-    // Fetch the REAL token of the logged-in doctor
-    const token = await AsyncStorage.getItem('doctorToken');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    try {
+      const host = getHost();
+      if (host) {
+        config.baseURL = `http://${host}:${PORT}/api/v1`;
+      }
+      const token = await AsyncStorage.getItem('doctorToken');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    } catch (e) {
+      console.warn('Failed to attach doctor token:', e);
     }
     return config;
   },
@@ -36,13 +53,10 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     if (error.response && error.response.status === 401) {
-      // If token is invalid or user deleted, clear local storage
       await AsyncStorage.removeItem('doctorToken');
-      // A full app reload might be needed, or context will handle it if wired up
     }
     return Promise.reject(error);
   }
 );
 
 export default api;
-
