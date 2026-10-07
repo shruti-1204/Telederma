@@ -16,6 +16,7 @@ import { AuthContext } from '../context/AuthContext';
 
 export default function WhatsAppOTPScreen({ navigation, route }) {
   const phone = route?.params?.phone || '9876543210';
+  const devOtp = route?.params?.devOtp;
   const { verifyWhatsAppOtp, resendWhatsAppOtp } = useContext(AuthContext);
 
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
@@ -91,8 +92,8 @@ export default function WhatsAppOTPScreen({ navigation, route }) {
 
   // Fast fill test code
   const handleFillTestCode = () => {
-    const testCode = ['1', '2', '3', '4', '5', '6'];
-    setOtp(testCode);
+    const codeDigits = (devOtp || '123456').slice(0, 6).split('');
+    setOtp(codeDigits);
     setStatusState('idle');
     setStatusMessage('');
     inputRefs.current[5]?.focus();
@@ -267,16 +268,18 @@ export default function WhatsAppOTPScreen({ navigation, route }) {
             )}
 
             {/* Dev Test Code Helper */}
-            <TouchableOpacity
-              style={styles.testCodeHelper}
-              onPress={handleFillTestCode}
-              accessibilityLabel="autofill-test-otp"
-              activeOpacity={0.7}
-            >
-              <Text style={styles.testCodeText}>
-
-              </Text>
-            </TouchableOpacity>
+            {devOtp ? (
+              <TouchableOpacity
+                style={styles.testCodeHelper}
+                onPress={handleFillTestCode}
+                accessibilityLabel="autofill-test-otp"
+                activeOpacity={0.7}
+              >
+                <Text style={styles.testCodeText}>
+                  🧪 Code: {devOtp} (Tap to autofill)
+                </Text>
+              </TouchableOpacity>
+            ) : null}
 
             {/* Verify Button */}
             <TouchableOpacity

@@ -137,7 +137,11 @@ const getAppointments = async (user) => {
         },
       },
       consultation: {
-        select: { id: true, status: true, roomId: true },
+        include: {
+          prescription: {
+            include: { items: true },
+          },
+        },
       },
       payments: true,
     },
@@ -159,7 +163,13 @@ const getAppointmentById = async (appointmentId, user) => {
           user: { select: { id: true, name: true, phone: true, email: true } },
         },
       },
-      consultation: true,
+      consultation: {
+        include: {
+          prescription: {
+            include: { items: true },
+          },
+        },
+      },
       payments: true,
     },
   });

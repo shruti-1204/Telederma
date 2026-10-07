@@ -50,7 +50,7 @@ export default function LoginScreen({ navigation }) {
       const response = await requestWhatsAppOtp(cleaned);
 
       if (response.success) {
-        navigation.navigate('WhatsAppOTP', { phone: cleaned });
+        navigation.navigate('WhatsAppOTP', { phone: cleaned, devOtp: response.devOtp });
       } else {
         setErrorMsg(response.message || 'Unable to send OTP. Please check your number.');
       }

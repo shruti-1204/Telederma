@@ -8,6 +8,7 @@ import {
   SafeAreaView,
   TextInput,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { Colors } from '../theme/colors';
 import Header from '../components/Header';
@@ -15,6 +16,7 @@ import { mockDoctors } from '../services/mockData';
 import { ConsultationContext } from '../context/ConsultationContext';
 import api from '../services/api';
 import { socketService } from '../services/socketService';
+import { parseDoctorSlots } from '../utils/slotHelper';
 
 const FILTERS = ['All', 'Available Today', 'Acne Specialists', 'Pediatric', 'Top Rated (4.8+)'];
 
@@ -55,27 +57,37 @@ export default function DoctorListScreen({ navigation }) {
           const fallback = mockDoctors[index % mockDoctors.length] || {};
           const cleanName = d.user?.name || 'Dr. Specialist';
           const displayName = cleanName.startsWith('Dr.') ? cleanName : `Dr. ${cleanName}`;
+          const rawAvatar = d.avatar || d.user?.avatar || null;
+          const exp = d.experienceYears != null ? d.experienceYears : (d.experience || fallback.experience || 10);
+          const fee = d.consultationFee != null ? Number(d.consultationFee) : (d.fee || fallback.fee || 700);
+          const hosp = d.hospitalClinic || fallback.hospital || 'TeleDerma Telehealth Network';
+          const expertise = d.expertiseAreas || 'General Dermatology, Acne, Eczema';
+          const langs = d.languages
+            ? (Array.isArray(d.languages) ? d.languages : d.languages.split(',').map((s) => s.trim()))
+            : (fallback.languages || ['English', 'Hindi']);
+          const availableSlotsText = d.availableSlots || '09:00 AM - 01:00 PM, 04:00 PM - 08:00 PM';
+          const duration = d.consultationDuration || '20 mins';
+
           return {
             id: d.id,
             name: displayName,
+            avatar: rawAvatar,
             qualification: d.qualification || 'MBBS, MD (Dermatology)',
             specialization: d.specialization || 'Clinical Dermatology',
-            experience: d.experience || fallback.experience || 10,
+            experience: exp,
             rating: fallback.rating || 4.9,
             reviewsCount: fallback.reviewsCount || 150,
-            fee: d.fee || fallback.fee || 700,
+            fee: fee,
+            consultationDuration: duration,
             verified: d.isVerified,
             availableToday: true,
-            about: d.bio || `${displayName} is a certified dermatologist registered on the TeleDerma telehealth network.`,
-            languages: fallback.languages || ['English', 'Hindi', 'Marathi'],
-            hospital: fallback.hospital || 'TeleDerma Telehealth Network',
+            about: d.bio || `${displayName} is a verified dermatologist specializing in clinical and aesthetic skin care.`,
+            languages: langs,
+            hospital: hosp,
+            expertiseAreas: expertise,
+            availableSlots: availableSlotsText,
             availableDates: ['Today', 'Tomorrow', 'Saturday', 'Sunday'],
-            slots: fallback.slots || [
-              { id: 's1', time: '09:30 AM', available: true },
-              { id: 's2', time: '10:30 AM', available: true },
-              { id: 's3', time: '02:00 PM', available: true },
-              { id: 's4', time: '04:30 PM', available: true },
-            ],
+            slots: parseDoctorSlots(d.availableSlots || fallback.slots),
           };
         });
         setDoctors(formatted);
@@ -173,16 +185,24 @@ export default function DoctorListScreen({ navigation }) {
               activeOpacity={0.8}
             >
               <View style={styles.cardTop}>
-                <View style={styles.avatarCircle}>
-                  <Text style={styles.avatarInitials}>
-                    {doc.name.replace('Dr. ', '').split(' ').map((w) => w[0]).join('')}
-                  </Text>
-                </View>
+                {doc.avatar ? (
+                  <Image
+                    source={{ uri: doc.avatar }}
+                    style={styles.avatarImg}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={styles.avatarCircle}>
+                    <Text style={styles.avatarInitials}>
+                      {doc.name.replace('Dr. ', '').split(' ').map((w) => w[0]).join('')}
+                    </Text>
+                  </View>
+                )}
 
                 <View style={styles.docInfoCol}>
                   <View style={styles.nameRow}>
                     <Text style={styles.docName}>{doc.name}</Text>
-                    {doc.verified && <Text style={styles.verifiedIcon}>✓</Text>}
+                    {doc.verified && <Text style={styles.verifiedIcon}>✓ Verified</Text>}
                   </View>
                   <Text style={styles.docQual}>{doc.qualification}</Text>
                   <Text style={styles.docSpec}>{doc.specialization}</Text>
@@ -191,13 +211,19 @@ export default function DoctorListScreen({ navigation }) {
                     <Text style={styles.metaItem}>⭐ {doc.rating} ({doc.reviewsCount})</Text>
                     <Text style={styles.metaDot}>•</Text>
                     <Text style={styles.metaItem}>{doc.experience} yrs exp</Text>
+                    <Text style={styles.metaDot}>•</Text>
+                    <Text style={styles.metaItem}>🗣️ {Array.isArray(doc.languages) ? doc.languages.slice(0, 2).join(', ') : doc.languages}</Text>
                   </View>
                 </View>
               </View>
 
-              {/* Hospital & Slots */}
+              {/* Hospital & Expertise & Slots */}
               <View style={styles.hospitalRow}>
                 <Text style={styles.hospitalText}>🏥 {doc.hospital}</Text>
+                {doc.expertiseAreas ? (
+                  <Text style={styles.expertiseText}>🔬 Expertise: {doc.expertiseAreas}</Text>
+                ) : null}
+                <Text style={styles.slotsSnippetText}>🕒 Available: {doc.availableSlots}</Text>
               </View>
 
               {/* Card Footer with fee and buttons */}
@@ -327,6 +353,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 12,
   },
+  avatarImg: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    marginRight: 12,
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+  },
   avatarInitials: {
     fontSize: 18,
     fontWeight: '800',
@@ -388,6 +422,19 @@ const styles = StyleSheet.create({
   hospitalText: {
     fontSize: 12,
     color: Colors.textDark,
+    fontWeight: '600',
+  },
+  expertiseText: {
+    fontSize: 11,
+    color: Colors.secondary,
+    fontWeight: '600',
+    marginTop: 3,
+  },
+  slotsSnippetText: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    marginTop: 3,
+    fontWeight: '500',
   },
   cardFooter: {
     flexDirection: 'row',

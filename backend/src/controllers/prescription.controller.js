@@ -2,6 +2,7 @@ const prescriptionService = require("../services/prescription.service");
 const { sendSuccess } = require("../utils/response");
 const {
   emitToPatient,
+  emitToDoctor,
   emitToUser,
   emitToRoom,
 } = require("../services/websocket.service");
@@ -10,19 +11,46 @@ const createPrescription = async (req, res, next) => {
   try {
     const prescription = await prescriptionService.createPrescription({
       consultationId: req.body.consultationId,
+      appointmentId: req.body.appointmentId,
       patientId: req.body.patientId,
+      diagnosis: req.body.diagnosis,
       notes: req.body.notes,
+      followUpDate: req.body.followUpDate,
       items: req.body.items,
       doctorUser: req.user,
     });
 
     // Real-Time Notification: Push new prescription directly to the patient in real time!
     emitToPatient(prescription.patientId, "prescription:new", prescription);
+    emitToPatient(prescription.patientId, "consultation:completed", {
+      consultationId: prescription.consultationId,
+      appointmentId: prescription.consultation?.appointmentId,
+      status: "COMPLETED",
+    });
+    emitToPatient(prescription.patientId, "appointment:completed", {
+      appointmentId: prescription.consultation?.appointmentId,
+      status: "COMPLETED",
+    });
+
+    emitToDoctor(prescription.doctorId, "consultation:completed", {
+      consultationId: prescription.consultationId,
+      appointmentId: prescription.consultation?.appointmentId,
+      status: "COMPLETED",
+    });
+    emitToDoctor(prescription.doctorId, "appointment:completed", {
+      appointmentId: prescription.consultation?.appointmentId,
+      status: "COMPLETED",
+    });
+
     if (prescription.patient?.user?.id) {
       emitToUser(prescription.patient.user.id, "prescription:new", prescription);
     }
     if (prescription.consultation?.roomId) {
       emitToRoom(prescription.consultation.roomId, "prescription:new", prescription);
+      emitToRoom(prescription.consultation.roomId, "consultation:ended", {
+        consultationId: prescription.consultationId,
+        status: "COMPLETED",
+      });
     }
 
     return sendSuccess(res, "Prescription created successfully", prescription, 201);
@@ -45,7 +73,12 @@ const getPrescriptionById = async (req, res, next) => {
 
 const getMyPrescriptions = async (req, res, next) => {
   try {
-    const prescriptions = await prescriptionService.getPatientPrescriptions(req.user.patientId);
+    let prescriptions = [];
+    if (req.user.role === "DOCTOR") {
+      prescriptions = await prescriptionService.getDoctorPrescriptions(req.user.doctorId);
+    } else {
+      prescriptions = await prescriptionService.getPatientPrescriptions(req.user.patientId);
+    }
     return sendSuccess(res, "Prescriptions retrieved", prescriptions);
   } catch (err) {
     return next(err);

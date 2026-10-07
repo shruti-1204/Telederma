@@ -200,8 +200,8 @@ export const AuthProvider = ({ children }) => {
       await api.put('/patients/me', {
         name: personalData.name,
         gender: personalData.gender,
-        email: personalData.email || undefined,
-        avatar: personalData.photoUri || undefined,
+        email: personalData.email || '',
+        avatar: personalData.photoUri !== undefined ? personalData.photoUri : null,
       });
     } catch (err) {
       console.warn('Failed to sync personal profile to backend:', err.message);
@@ -232,7 +232,7 @@ export const AuthProvider = ({ children }) => {
           existingConditions: medicalData.existingConditions,
           currentMedications: medicalData.currentMedications,
           skinHistory: medicalData.previousSkinProblems,
-          avatar: patient.photoUri || undefined,
+          avatar: patient.photoUri !== undefined ? patient.photoUri : null,
         });
       } catch (err) {
         console.warn('Failed to sync medical profile to backend:', err.message);
@@ -258,12 +258,12 @@ export const AuthProvider = ({ children }) => {
       await api.put('/patients/me', {
         name: updated.name,
         gender: updated.gender,
-        email: updated.email || undefined,
+        email: updated.email || '',
         allergies: updated.allergies,
         existingConditions: updated.existingConditions,
         currentMedications: updated.currentMedications,
         skinHistory: updated.previousSkinProblems,
-        avatar: updated.photoUri || undefined,
+        avatar: updated.photoUri !== undefined ? updated.photoUri : null,
       });
     } catch (err) {
       console.warn('Failed to sync updated profile to backend:', err.message);

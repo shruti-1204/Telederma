@@ -34,22 +34,26 @@ const sendOtp = async (phone, isLogin) => {
 
   // --- Send Live WhatsApp OTP via Ultramsg ---
   try {
-    const instanceId = 'instance193175';
-    const token = '4qv23u43om8ujbnw';
+    const instanceId = env.ULTRAMSG_INSTANCE_ID;
+    const token = env.ULTRAMSG_TOKEN;
     
     // Ensure phone number has country code for WhatsApp API
     const formattedPhone = phone.startsWith('+91') ? phone : `+91${phone}`;
     
-    await axios.post(`https://api.ultramsg.com/${instanceId}/messages/chat`, {
-      token: token,
-      to: formattedPhone,
-      body: `*Telederma Verification*\n\nYour Doctor Portal OTP is: *${otp}*\n\n_Valid for 5 minutes. Do not share this with anyone._`
-    }, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-    });
-    console.log(`[WhatsApp] OTP Successfully sent to ${formattedPhone}`);
+    if (instanceId && token && instanceId !== 'none') {
+      await axios.post(`https://api.ultramsg.com/${instanceId}/messages/chat`, {
+        token: token,
+        to: formattedPhone,
+        body: `*Telederma Verification*\n\nYour Doctor Portal OTP is: *${otp}*\n\n_Valid for 5 minutes. Do not share this with anyone._`
+      }, {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        timeout: 8000,
+      });
+      console.log(`[WhatsApp] OTP Successfully sent to ${formattedPhone}`);
+    }
   } catch (err) {
-    console.error(`[WhatsApp Error] Failed to send OTP:`, err.message);
+    const errorDetail = err.response?.data?.error || err.message;
+    console.warn(`[WhatsApp Notice] Could not deliver via Ultramsg (${errorDetail}). Active OTP: ${otp}`);
   }
 
   await createAuditLog({
@@ -166,6 +170,7 @@ const verifyOtp = async ({ phone, otp, role = "PATIENT", name, email }) => {
       phone: user.phone,
       email: user.email,
       name: user.name,
+      avatar: user.avatar,
       role: user.role,
       status: user.status,
       patientId: user.patient?.id || null,
@@ -242,6 +247,7 @@ const getMe = async (userId) => {
     phone: user.phone,
     email: user.email,
     name: user.name,
+    avatar: user.avatar,
     role: user.role,
     status: user.status,
     patient: user.patient,

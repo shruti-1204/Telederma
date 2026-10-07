@@ -2,17 +2,17 @@ const { z } = require("zod");
 
 const updatePatientProfileSchema = {
   body: z.object({
-    dateOfBirth: z.string().datetime({ offset: true }).or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).optional(),
-    gender: z.string().max(20).optional(),
-    bloodGroup: z.string().max(10).optional(),
-    allergies: z.string().max(1000).optional(),
-    existingConditions: z.string().max(1000).optional(),
-    currentMedications: z.string().max(1000).optional(),
-    skinHistory: z.string().max(2000).optional(),
-    emergencyContact: z.string().max(100).optional(),
-    avatar: z.string().optional(),
-    name: z.string().min(2).max(100).optional(),
-    email: z.string().email().optional(),
+    dateOfBirth: z.string().datetime({ offset: true }).or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).optional().nullable(),
+    gender: z.string().max(20).optional().nullable(),
+    bloodGroup: z.string().max(10).optional().nullable(),
+    allergies: z.string().max(1000).optional().nullable(),
+    existingConditions: z.string().max(1000).optional().nullable(),
+    currentMedications: z.string().max(1000).optional().nullable(),
+    skinHistory: z.string().max(2000).optional().nullable(),
+    emergencyContact: z.string().max(100).optional().nullable(),
+    avatar: z.string().optional().nullable(),
+    name: z.string().min(1).max(100).optional(),
+    email: z.string().email().optional().nullable().or(z.literal("")),
   }),
 };
 

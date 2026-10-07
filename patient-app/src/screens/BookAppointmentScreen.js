@@ -15,6 +15,7 @@ import { mockDoctors } from '../services/mockData';
 import { ConsultationContext } from '../context/ConsultationContext';
 import api from '../services/api';
 import { socketService } from '../services/socketService';
+import { parseDoctorSlots } from '../utils/slotHelper';
 
 const DATES = [
   { id: 'd1', label: 'Today', date: 'Oct 04', fullDate: '2026-10-04' },
@@ -24,11 +25,22 @@ const DATES = [
 ];
 
 export default function BookAppointmentScreen({ navigation, route }) {
-  const doctor = route?.params?.doctor || mockDoctors[0];
+  const incomingDoctor = route?.params?.doctor || mockDoctors[0];
   const { setBookingConfirmed } = useContext(ConsultationContext);
 
+  const [doctor, setDoctor] = useState(() => {
+    const parsed = parseDoctorSlots(incomingDoctor.availableSlots || incomingDoctor.slots);
+    return {
+      ...incomingDoctor,
+      slots: parsed,
+    };
+  });
+
   const [selectedDate, setSelectedDate] = useState(DATES[0]);
-  const [selectedSlot, setSelectedSlot] = useState(doctor.slots?.find((s) => s.available) || { id: 's1', time: '10:00 AM' });
+  const [selectedSlot, setSelectedSlot] = useState(() => {
+    const initialSlots = parseDoctorSlots(incomingDoctor.availableSlots || incomingDoctor.slots);
+    return initialSlots.find((s) => s.available) || initialSlots[0] || { id: 's1', time: '10:00 AM' };
+  });
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
@@ -40,9 +52,66 @@ export default function BookAppointmentScreen({ navigation, route }) {
   const [isConsultationReady, setIsConsultationReady] = useState(false);
   const [meetRoomId, setMeetRoomId] = useState('td-room-live');
 
+  // Auto-align selectedSlot when doctor slots change
+  useEffect(() => {
+    if (doctor.slots && doctor.slots.length > 0) {
+      const exists = doctor.slots.find((s) => s.time === selectedSlot?.time);
+      if (!exists) {
+        setSelectedSlot(doctor.slots.find((s) => s.available) || doctor.slots[0]);
+      }
+    }
+  }, [doctor.slots]);
+
   useEffect(() => {
     // Ensure real-time WebSocket connection is active
     socketService.connect();
+
+    // Fetch freshest doctor slots directly from backend
+    const fetchLiveDoctorSlots = async () => {
+      try {
+        if (!incomingDoctor?.id) return;
+        const res = await api.get(`/doctors/${incomingDoctor.id}`);
+        if (res.data?.data) {
+          const liveDoc = res.data.data;
+          if (liveDoc.availableSlots) {
+            const freshSlots = parseDoctorSlots(liveDoc.availableSlots);
+            setDoctor((prev) => ({
+              ...prev,
+              ...liveDoc,
+              availableSlots: liveDoc.availableSlots,
+              slots: freshSlots,
+            }));
+          }
+        }
+      } catch (e) {
+        console.warn('[BookAppointment] Live slots fetch notice:', e.message);
+      }
+    };
+
+    fetchLiveDoctorSlots();
+
+    // Real-time listener: When doctor modifies active schedule in Doctor App
+    const unsubDocUpdated = socketService.on('doctor:updated', (updatedDoc) => {
+      console.log('[BookAppointmentScreen] Live doctor:updated received:', updatedDoc);
+      if (updatedDoc) {
+        const matchesThisDoctor =
+          updatedDoc.id === incomingDoctor.id ||
+          updatedDoc.userId === incomingDoctor.userId ||
+          updatedDoc.id === doctor.id;
+
+        if (matchesThisDoctor && updatedDoc.availableSlots) {
+          const freshSlots = parseDoctorSlots(updatedDoc.availableSlots);
+          setDoctor((prev) => ({
+            ...prev,
+            ...updatedDoc,
+            availableSlots: updatedDoc.availableSlots,
+            slots: freshSlots,
+          }));
+        } else {
+          fetchLiveDoctorSlots();
+        }
+      }
+    });
 
     // Listen for doctor confirmation in real time
     const unsubConfirmed = socketService.on('appointment:confirmed', (confirmedAppt) => {
@@ -63,10 +132,11 @@ export default function BookAppointmentScreen({ navigation, route }) {
     });
 
     return () => {
+      unsubDocUpdated();
       unsubConfirmed();
       unsubReady();
     };
-  }, []);
+  }, [incomingDoctor?.id]);
 
   const handlePayNow = async () => {
     setIsProcessingPayment(true);

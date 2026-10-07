@@ -224,7 +224,10 @@ export default function VideoCallScreen({ navigation, route }) {
             </Text>
             <TouchableOpacity
               style={styles.viewRxBtn}
-              onPress={() => navigation.navigate('Prescription', { appointment })}
+              onPress={() => navigation.navigate('Prescription', {
+                appointment,
+                prescription: appointment?.consultation?.prescription || appointment?.prescription,
+              })}
             >
               <Text style={styles.viewRxBtnText}>View Digital Prescription ➔</Text>
             </TouchableOpacity>

@@ -29,26 +29,30 @@ const getPatientByUserId = async (userId) => {
 const updatePatientProfile = async (userId, updateData) => {
   const patient = await getPatientByUserId(userId);
 
-  const { name, email, dateOfBirth, ...patientFields } = updateData;
+  const { name, email, avatar, dateOfBirth, ...patientFields } = updateData;
 
-  // Update user name/email/avatar if provided
-  if (name || email || updateData.avatar) {
+  // Update user name/email/avatar
+  const userUpdate = {};
+  if (name !== undefined) userUpdate.name = name;
+  if (email !== undefined) userUpdate.email = email === "" ? null : email;
+  if (avatar !== undefined) userUpdate.avatar = avatar;
+
+  if (Object.keys(userUpdate).length > 0) {
     await prisma.user.update({
       where: { id: userId },
-      data: {
-        ...(name && { name }),
-        ...(email && { email }),
-        ...(updateData.avatar && { avatar: updateData.avatar }),
-      },
+      data: userUpdate,
     });
   }
 
+  const patientUpdate = {
+    ...patientFields,
+    ...(avatar !== undefined && { avatar }),
+    ...(dateOfBirth !== undefined && { dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null }),
+  };
+
   const updatedPatient = await prisma.patient.update({
     where: { id: patient.id },
-    data: {
-      ...patientFields,
-      ...(dateOfBirth && { dateOfBirth: new Date(dateOfBirth) }),
-    },
+    data: patientUpdate,
     include: {
       user: {
         select: { id: true, phone: true, email: true, name: true, avatar: true, role: true, status: true },

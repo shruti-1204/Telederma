@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,19 +6,75 @@ import {
   ScrollView,
   TouchableOpacity,
   SafeAreaView,
+  Image,
 } from 'react-native';
 import { Colors } from '../theme/colors';
 import Header from '../components/Header';
 import { mockDoctors } from '../services/mockData';
+import { socketService } from '../services/socketService';
+import api from '../services/api';
 
 export default function DoctorProfileScreen({ navigation, route }) {
-  const doctor = route?.params?.doctor || mockDoctors[0];
+  const incomingDoctor = route?.params?.doctor || mockDoctors[0];
+  const [doctor, setDoctor] = useState(incomingDoctor);
+
+  useEffect(() => {
+    socketService.connect();
+
+    // Fetch freshest doctor record from backend
+    const fetchLive = async () => {
+      try {
+        if (!incomingDoctor?.id) return;
+        const res = await api.get(`/doctors/${incomingDoctor.id}`);
+        if (res.data?.data) {
+          setDoctor((prev) => ({
+            ...prev,
+            ...res.data.data,
+            availableSlots: res.data.data.availableSlots || prev.availableSlots,
+          }));
+        }
+      } catch (_) {}
+    };
+    fetchLive();
+
+    const unsub = socketService.on('doctor:updated', (updated) => {
+      if (updated && (updated.id === incomingDoctor.id || updated.userId === incomingDoctor.userId)) {
+        setDoctor((prev) => ({
+          ...prev,
+          ...updated,
+          availableSlots: updated.availableSlots || prev.availableSlots,
+        }));
+      }
+    });
+
+    return () => unsub();
+  }, [incomingDoctor?.id]);
+
+  const initials = doctor.name
+    ? doctor.name
+        .replace('Dr. ', '')
+        .split(' ')
+        .map((w) => w[0])
+        .join('')
+    : 'DR';
+
+  const hospitalName = doctor.hospital || doctor.hospitalClinic || 'TeleDerma Telehealth Network';
+  const expertise = doctor.expertiseAreas || 'Acne, Eczema, Psoriasis, General Dermatology';
+  const duration = doctor.consultationDuration || '20 mins';
+  const slots = doctor.availableSlots || '09:00 AM - 01:00 PM, 04:00 PM - 08:00 PM';
+  const languagesList = Array.isArray(doctor.languages)
+    ? doctor.languages.join(', ')
+    : doctor.languages || 'English, Hindi';
 
   return (
     <SafeAreaView style={styles.safe}>
       <Header navigation={navigation} />
 
-      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Back Link */}
         <TouchableOpacity style={styles.backRow} onPress={() => navigation.goBack()}>
           <Text style={styles.backText}>← Back to Doctors List</Text>
@@ -26,11 +82,18 @@ export default function DoctorProfileScreen({ navigation, route }) {
 
         {/* Doctor Header Card */}
         <View style={styles.profileCard}>
-          <View style={styles.avatarBig}>
-            <Text style={styles.avatarBigText}>
-              {doctor.name.split(' ').map((w) => w[0]).join('')}
-            </Text>
-          </View>
+          {doctor.avatar ? (
+            <Image
+              source={{ uri: doctor.avatar }}
+              style={styles.avatarBigImg}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={styles.avatarBig}>
+              <Text style={styles.avatarBigText}>{initials}</Text>
+            </View>
+          )}
+
           <View style={styles.nameRow}>
             <Text style={styles.docName}>{doctor.name}</Text>
             {doctor.verified && <Text style={styles.verifiedTag}>✓ Verified</Text>}
@@ -40,8 +103,8 @@ export default function DoctorProfileScreen({ navigation, route }) {
 
           <View style={styles.statsRow}>
             <View style={styles.statCol}>
-              <Text style={styles.statVal}>⭐ {doctor.rating}</Text>
-              <Text style={styles.statLbl}>{doctor.reviewsCount} reviews</Text>
+              <Text style={styles.statVal}>⭐ {doctor.rating || 4.9}</Text>
+              <Text style={styles.statLbl}>{doctor.reviewsCount || 150} reviews</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statCol}>
@@ -62,23 +125,47 @@ export default function DoctorProfileScreen({ navigation, route }) {
           <Text style={styles.bioText}>{doctor.about}</Text>
         </View>
 
+        {/* Professional Expertise & Qualifications */}
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Professional Information & Expertise</Text>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Specialization:</Text>
+            <Text style={styles.infoValue}>{doctor.specialization}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Qualifications:</Text>
+            <Text style={styles.infoValue}>{doctor.qualification}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Areas of Expertise:</Text>
+            <Text style={styles.infoValue}>{expertise}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Consultation Duration:</Text>
+            <Text style={styles.infoValue}>{duration}</Text>
+          </View>
+        </View>
+
         {/* Practice Hospital & Languages */}
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Clinical Practice & Languages</Text>
-          <Text style={styles.subItem}>🏥 {doctor.hospital}</Text>
-          <Text style={styles.subItem}>🗣️ Languages: {doctor.languages.join(', ')}</Text>
+          <Text style={styles.subItem}>🏥 {hospitalName}</Text>
+          <Text style={styles.subItem}>🗣️ Languages: {languagesList}</Text>
         </View>
 
-        {/* Available Dates */}
+        {/* Available Dates & Time Slots */}
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Upcoming Availability</Text>
-          <View style={styles.datesRow}>
-            {doctor.availableDates.map((date, idx) => (
-              <View key={idx} style={styles.datePill}>
-                <Text style={styles.datePillText}>📅 {date}</Text>
-              </View>
-            ))}
-          </View>
+          <Text style={styles.sectionTitle}>Upcoming Availability & Slots</Text>
+          <Text style={styles.slotDetailText}>🕒 Working Hours / Slots: {slots}</Text>
+          {doctor.availableDates && doctor.availableDates.length > 0 && (
+            <View style={styles.datesRow}>
+              {doctor.availableDates.map((date, idx) => (
+                <View key={idx} style={styles.datePill}>
+                  <Text style={styles.datePillText}>📅 {date}</Text>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
 
         {/* Book Consultation CTA Button */}
@@ -126,16 +213,24 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   avatarBig: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: Colors.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
   },
+  avatarBigImg: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 2,
+    borderColor: Colors.primary,
+    marginBottom: 12,
+  },
   avatarBigText: {
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: '800',
     color: Colors.primary,
   },
@@ -207,17 +302,37 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
     color: Colors.textDark,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   bioText: {
     fontSize: 13,
     color: Colors.textDark,
     lineHeight: 20,
   },
+  infoRow: {
+    marginBottom: 8,
+  },
+  infoLabel: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  infoValue: {
+    fontSize: 13,
+    color: Colors.textDark,
+    fontWeight: '600',
+  },
   subItem: {
     fontSize: 13,
     color: Colors.textDark,
     marginBottom: 6,
+  },
+  slotDetailText: {
+    fontSize: 13,
+    color: Colors.textDark,
+    marginBottom: 10,
+    fontWeight: '500',
   },
   datesRow: {
     flexDirection: 'row',

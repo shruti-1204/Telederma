@@ -31,7 +31,12 @@ const LoginScreen = () => {
     try {
       const res = await api.post('/auth/send-otp', { phone: cleanPhone, isLogin });
       setOtpSent(true);
-      setStatusMessage('✓ OTP sent to your WhatsApp! ');
+      const devOtp = res.data?.data?.devOtp;
+      if (devOtp) {
+        setStatusMessage(`✓ OTP sent! (Code: ${devOtp})`);
+      } else {
+        setStatusMessage('✓ OTP sent to your WhatsApp!');
+      }
     } catch (e) {
       const msg = e.response?.data?.message || 'Failed to send OTP';
       setErrorMessage(msg);
@@ -98,9 +103,14 @@ const LoginScreen = () => {
 
       // 2. If verified, send OTP
       setStatusMessage('✓ NMC Verified! Sending OTP to your WhatsApp...');
-      await api.post('/auth/send-otp', { phone: cleanPhone, isLogin: false });
+      const res = await api.post('/auth/send-otp', { phone: cleanPhone, isLogin: false });
       setOtpSent(true);
-      setStatusMessage('✓ NMC Verified! OTP sent to WhatsApp ');
+      const devOtp = res.data?.data?.devOtp;
+      if (devOtp) {
+        setStatusMessage(`✓ NMC Verified! OTP sent (Code: ${devOtp})`);
+      } else {
+        setStatusMessage('✓ NMC Verified! OTP sent to WhatsApp');
+      }
     } catch (error) {
       setErrorMessage(error.response?.data?.message || 'Verification Failed. Please check your details.');
       setStatusMessage('');

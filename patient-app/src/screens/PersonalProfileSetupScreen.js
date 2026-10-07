@@ -204,7 +204,7 @@ export default function PersonalProfileSetupScreen({ navigation, route }) {
                     setName(val);
                     if (errors.name) setErrors({ ...errors, name: null });
                   }}
-                  placeholder="e.g. Rahul Sharma"
+                  placeholder="Enter your full name"
                   placeholderTextColor="#94A3B8"
                 />
                 {errors.name && <Text style={styles.fieldErrorText}>{errors.name}</Text>}

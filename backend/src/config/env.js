@@ -28,6 +28,10 @@ const env = {
 
   // Development OTP Bypass
   DEV_OTP: process.env.DEV_OTP || "123456",
+
+  // WhatsApp Gateway (Ultramsg)
+  ULTRAMSG_INSTANCE_ID: process.env.ULTRAMSG_INSTANCE_ID || "instance193175",
+  ULTRAMSG_TOKEN: process.env.ULTRAMSG_TOKEN || "4qv23u43om8ujbnw",
 };
 
 module.exports = env;

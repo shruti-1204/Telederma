@@ -17,6 +17,7 @@ import ActionCard from '../components/ActionCard';
 import { mockAppointments, mockPrescriptions, mockReminders, mockDoctors } from '../services/mockData';
 import api from '../services/api';
 import { socketService } from '../services/socketService';
+import { parseDoctorSlots } from '../utils/slotHelper';
 
 export default function DashboardScreen({ navigation }) {
   const { patient } = useContext(AuthContext);
@@ -25,12 +26,18 @@ export default function DashboardScreen({ navigation }) {
   const [registeredDoctors, setRegisteredDoctors] = useState([]);
   const [loadingDoctors, setLoadingDoctors] = useState(true);
   const [latestAppointment, setLatestAppointment] = useState(null);
-  const [latestPrescription, setLatestPrescription] = useState(mockPrescriptions[0]);
+  const [latestPrescription, setLatestPrescription] = useState(null);
 
   useEffect(() => {
     fetchRegisteredDoctors();
     fetchLatestAppointment();
     fetchLatestPrescription();
+
+    const unsubFocus = navigation.addListener('focus', () => {
+      fetchLatestAppointment();
+      fetchLatestPrescription();
+      fetchRegisteredDoctors();
+    });
 
     socketService.connect();
 
@@ -45,6 +52,18 @@ export default function DashboardScreen({ navigation }) {
       setLatestAppointment((prev) => (prev ? { ...prev, status: 'CONFIRMED' } : appt));
     });
 
+    const unsubApptComp = socketService.on('appointment:completed', () => {
+      console.log('[Dashboard] Live appointment:completed received');
+      fetchLatestAppointment();
+      fetchLatestPrescription();
+    });
+
+    const unsubConsultComp = socketService.on('consultation:completed', () => {
+      console.log('[Dashboard] Live consultation:completed received');
+      fetchLatestAppointment();
+      fetchLatestPrescription();
+    });
+
     const unsubReady = socketService.on('consultation:ready', (data) => {
       console.log('[Dashboard] Live consultation:ready received:', data);
       setLatestAppointment((prev) => (prev ? { ...prev, consultationReady: true, roomId: data.roomId } : prev));
@@ -53,6 +72,8 @@ export default function DashboardScreen({ navigation }) {
     const unsubRx = socketService.on('prescription:new', (rx) => {
       console.log('[Dashboard] Live prescription:new received:', rx);
       setLatestPrescription(rx);
+      fetchLatestAppointment();
+      fetchLatestPrescription();
     });
 
     const unsubDoc = socketService.on('doctor:new', () => {
@@ -64,14 +85,17 @@ export default function DashboardScreen({ navigation }) {
     });
 
     return () => {
+      unsubFocus();
       unsubNewAppt();
       unsubConfAppt();
+      unsubApptComp();
+      unsubConsultComp();
       unsubReady();
       unsubRx();
       unsubDoc();
       unsubDocUpd();
     };
-  }, []);
+  }, [navigation]);
 
   const fetchRegisteredDoctors = async () => {
     try {
@@ -97,12 +121,8 @@ export default function DashboardScreen({ navigation }) {
             languages: fallback.languages || ['English', 'Hindi', 'Marathi'],
             hospital: fallback.hospital || 'TeleDerma Telehealth Network',
             availableDates: ['Today', 'Tomorrow', 'Saturday', 'Sunday'],
-            slots: fallback.slots || [
-              { id: 's1', time: '09:30 AM', available: true },
-              { id: 's2', time: '10:30 AM', available: true },
-              { id: 's3', time: '02:00 PM', available: true },
-              { id: 's4', time: '04:30 PM', available: true },
-            ],
+            availableSlots: d.availableSlots,
+            slots: parseDoctorSlots(d.availableSlots || fallback.slots),
           };
         });
         setRegisteredDoctors(formatted);
@@ -118,13 +138,21 @@ export default function DashboardScreen({ navigation }) {
     try {
       const res = await api.get('/appointments');
       if (res.data?.data && res.data.data.length > 0) {
-        // Find most recent active appointment
+        // Find most recent active appointment (only CONFIRMED or PENDING, not COMPLETED)
         const sorted = res.data.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        const active = sorted.find((a) => a.status === 'CONFIRMED' || a.status === 'PENDING') || sorted[0];
-        setLatestAppointment(active);
+        const active = sorted.find(
+          (a) =>
+            (a.status === 'CONFIRMED' || a.status === 'PENDING') &&
+            a.status !== 'COMPLETED' &&
+            a.consultation?.status !== 'COMPLETED'
+        );
+        setLatestAppointment(active || null);
+      } else {
+        setLatestAppointment(null);
       }
     } catch (err) {
       console.warn('Dashboard fetch appointment warning:', err.message);
+      setLatestAppointment(null);
     }
   };
 
@@ -158,6 +186,7 @@ export default function DashboardScreen({ navigation }) {
         : '10:00 AM';
       const isConfirmed = latestAppointment.status === 'CONFIRMED';
       return {
+        hasActive: true,
         doctorName: cleanDocName,
         timeString: `Today at ${slotTime}`,
         statusText: isConfirmed ? '🟢 CONFIRMED' : '🟡 AWAITING DOCTOR',
@@ -172,13 +201,13 @@ export default function DashboardScreen({ navigation }) {
         },
       };
     }
-    const fallback = mockAppointments.find((a) => a.status === 'CONFIRMED') || mockAppointments[0];
     return {
-      doctorName: fallback?.doctorName || 'Dr. Kundan Ashok Kharde',
-      timeString: 'Today at 09:30 AM',
-      statusText: '🟢 CONFIRMED',
-      isConfirmed: true,
-      data: fallback,
+      hasActive: false,
+      doctorName: 'No Upcoming Consultations',
+      timeString: 'Active queue is clear',
+      statusText: '✓ ALL CLEAR',
+      isConfirmed: false,
+      data: null,
     };
   };
 
@@ -198,7 +227,7 @@ export default function DashboardScreen({ navigation }) {
         <View style={styles.heroBanner}>
           <View style={styles.heroTextCol}>
             <Text style={styles.heroTitle}>
-              Hello, {patient?.name || 'Rahul Sharma'} 👋
+              Hello, {patient?.name || 'User'} 👋
             </Text>
             <Text style={styles.heroSubtitle}>
               Live dermatology consultations & instant digital prescriptions.
@@ -338,10 +367,12 @@ export default function DashboardScreen({ navigation }) {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.summaryCardsRow}
           >
-            {/* Card 1: Upcoming Appointment */}
+            {/* Card 1: Upcoming Appointment / Active Queue */}
             <View style={styles.summaryCard}>
               <View style={styles.summaryHeaderRow}>
-                <Text style={styles.summaryBadgeLabel}>📅 {upcomingInfo.statusText}</Text>
+                <Text style={styles.summaryBadgeLabel}>
+                  {upcomingInfo.hasActive ? `📅 ${upcomingInfo.statusText}` : '✓ NO ACTIVE CALL'}
+                </Text>
               </View>
               <Text style={styles.summaryDoctorName}>
                 {upcomingInfo.doctorName}
@@ -349,15 +380,27 @@ export default function DashboardScreen({ navigation }) {
               <Text style={styles.summaryDateTime}>
                 {upcomingInfo.timeString}
               </Text>
-              <TouchableOpacity
-                style={[styles.callScreenBtn, !upcomingInfo.isConfirmed && { backgroundColor: '#F59E0B' }]}
-                onPress={() => navigation.navigate('VideoCall', { appointment: upcomingInfo.data })}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.callScreenBtnText}>
-                  {upcomingInfo.isConfirmed ? 'Enter Call Screen 🎥' : 'Join Waiting Room ⏳'}
-                </Text>
-              </TouchableOpacity>
+              {upcomingInfo.hasActive ? (
+                <TouchableOpacity
+                  style={[styles.callScreenBtn, !upcomingInfo.isConfirmed && { backgroundColor: '#F59E0B' }]}
+                  onPress={() => navigation.navigate('VideoCall', { appointment: upcomingInfo.data })}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.callScreenBtnText}>
+                    {upcomingInfo.isConfirmed ? 'Enter Call Screen 🎥' : 'Join Waiting Room ⏳'}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.callScreenBtn, { backgroundColor: '#0F967E' }]}
+                  onPress={() => navigation.navigate('MedicalRecords')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.callScreenBtnText}>
+                    View Records & Rx ➔
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             {/* Card 2: Follow-up Reminder */}
@@ -383,15 +426,23 @@ export default function DashboardScreen({ navigation }) {
               </View>
               <View style={{ flex: 1, minHeight: 46, justifyContent: 'center' }}>
                 <Text style={{ fontSize: 13, color: Colors.textSecondary }}>
-                  {latestPrescription?.doctorName || 'Dr. Kundan Ashok Kharde'} Rx
+                  {latestPrescription ? `${latestPrescription.doctorName || 'Doctor'} Rx` : 'No Prescriptions Yet'}
                 </Text>
               </View>
               <TouchableOpacity
                 style={styles.prescriptionBtn}
-                onPress={() => navigation.navigate('Prescription', { prescription: latestPrescription })}
+                onPress={() => {
+                  if (latestPrescription) {
+                    navigation.navigate('Prescription', { prescription: latestPrescription });
+                  } else {
+                    navigation.navigate('MedicalRecords');
+                  }
+                }}
                 activeOpacity={0.8}
               >
-                <Text style={styles.prescriptionBtnText}>View Prescription</Text>
+                <Text style={styles.prescriptionBtnText}>
+                  {latestPrescription ? 'View Prescription' : 'View Records'}
+                </Text>
               </TouchableOpacity>
             </View>
           </ScrollView>

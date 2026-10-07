@@ -2,12 +2,23 @@ const { z } = require("zod");
 
 const updateDoctorProfileSchema = {
   body: z.object({
-    specialization: z.string().max(100).optional(),
-    qualification: z.string().max(100).optional(),
-    licenseNumber: z.string().max(50).optional(),
-    bio: z.string().max(2000).optional(),
-    name: z.string().min(2).max(100).optional(),
-    email: z.string().email().optional(),
+    name: z.string().min(1).max(100).optional(),
+    email: z.string().email().optional().or(z.literal("")),
+    avatar: z.string().optional().nullable(),
+    gender: z.string().max(20).optional().nullable(),
+    age: z.number().or(z.string()).optional().nullable(),
+    dateOfBirth: z.string().optional().nullable(),
+    specialization: z.string().max(100).optional().nullable(),
+    qualification: z.string().max(200).optional().nullable(),
+    experienceYears: z.number().or(z.string()).optional().nullable(),
+    hospitalClinic: z.string().max(200).optional().nullable(),
+    expertiseAreas: z.string().max(500).optional().nullable(),
+    consultationFee: z.number().or(z.string()).optional().nullable(),
+    availableSlots: z.string().max(1000).optional().nullable(),
+    consultationDuration: z.string().max(50).optional().nullable(),
+    languages: z.string().max(200).optional().nullable(),
+    licenseNumber: z.string().max(50).optional().nullable(),
+    bio: z.string().max(2000).optional().nullable(),
   }),
 };
 

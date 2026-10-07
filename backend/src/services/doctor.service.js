@@ -7,7 +7,7 @@ const getDoctorByUserId = async (userId) => {
     where: { userId },
     include: {
       user: {
-        select: { id: true, phone: true, email: true, name: true, role: true, status: true },
+        select: { id: true, phone: true, email: true, name: true, avatar: true, role: true, status: true },
       },
       availabilities: true,
     },
@@ -18,37 +18,64 @@ const getDoctorByUserId = async (userId) => {
       data: { userId },
       include: {
         user: {
-          select: { id: true, phone: true, email: true, name: true, role: true, status: true },
+          select: { id: true, phone: true, email: true, name: true, avatar: true, role: true, status: true },
         },
         availabilities: true,
       },
     });
   }
 
-  return doctor;
+  const isProfileCompleted = Boolean(
+    doctor.qualification &&
+    doctor.specialization &&
+    doctor.hospitalClinic &&
+    doctor.consultationFee &&
+    doctor.experienceYears !== null &&
+    doctor.experienceYears !== undefined &&
+    doctor.languages
+  );
+
+  return {
+    ...doctor,
+    isProfileCompleted,
+  };
 };
 
 const updateDoctorProfile = async (userId, updateData) => {
   const doctor = await getDoctorByUserId(userId);
-  const { name, email, ...doctorFields } = updateData;
+  const { name, email, avatar, dateOfBirth, consultationFee, experienceYears, age, ...doctorFields } = updateData;
 
-  if (name || email) {
+  // Update user name/email/avatar
+  const userUpdate = {};
+  if (name !== undefined) userUpdate.name = name;
+  if (email !== undefined) userUpdate.email = email === "" ? null : email;
+  if (avatar !== undefined) userUpdate.avatar = avatar;
+
+  if (Object.keys(userUpdate).length > 0) {
     await prisma.user.update({
       where: { id: userId },
-      data: {
-        ...(name && { name }),
-        ...(email && { email }),
-      },
+      data: userUpdate,
     });
   }
 
+  // Update doctor fields
+  const doctorData = {
+    ...doctorFields,
+    ...(avatar !== undefined && { avatar }),
+    ...(dateOfBirth !== undefined && { dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null }),
+    ...(age !== undefined && { age: age !== null && age !== "" ? parseInt(age, 10) : null }),
+    ...(experienceYears !== undefined && { experienceYears: experienceYears !== null && experienceYears !== "" ? parseInt(experienceYears, 10) : null }),
+    ...(consultationFee !== undefined && { consultationFee: consultationFee !== null && consultationFee !== "" ? parseFloat(consultationFee) : null }),
+  };
+
   const updatedDoctor = await prisma.doctor.update({
     where: { id: doctor.id },
-    data: doctorFields,
+    data: doctorData,
     include: {
       user: {
-        select: { id: true, phone: true, email: true, name: true, role: true, status: true },
+        select: { id: true, phone: true, email: true, name: true, avatar: true, role: true, status: true },
       },
+      availabilities: true,
     },
   });
 
@@ -59,7 +86,20 @@ const updateDoctorProfile = async (userId, updateData) => {
     resourceId: doctor.id,
   });
 
-  return updatedDoctor;
+  const isProfileCompleted = Boolean(
+    updatedDoctor.qualification &&
+    updatedDoctor.specialization &&
+    updatedDoctor.hospitalClinic &&
+    updatedDoctor.consultationFee &&
+    updatedDoctor.experienceYears !== null &&
+    updatedDoctor.experienceYears !== undefined &&
+    updatedDoctor.languages
+  );
+
+  return {
+    ...updatedDoctor,
+    isProfileCompleted,
+  };
 };
 
 const getVerifiedDoctors = async ({ specialization, search } = {}) => {
@@ -86,7 +126,7 @@ const getVerifiedDoctors = async ({ specialization, search } = {}) => {
     where,
     include: {
       user: {
-        select: { id: true, name: true, email: true, phone: true },
+        select: { id: true, name: true, email: true, phone: true, avatar: true },
       },
       availabilities: {
         where: { isActive: true },
@@ -101,7 +141,7 @@ const getDoctorById = async (doctorId) => {
     where: { id: doctorId },
     include: {
       user: {
-        select: { id: true, name: true, email: true, phone: true },
+        select: { id: true, name: true, email: true, phone: true, avatar: true },
       },
       availabilities: {
         where: { isActive: true },

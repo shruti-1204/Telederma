@@ -243,7 +243,9 @@ const VideoCallScreen = ({ route, navigation }) => {
 
       await api.post('/prescriptions', {
         consultationId: cId || undefined,
+        appointmentId: patient?.backendData?.id || (patient?.id && !String(patient.id).startsWith('cst_') ? patient.id : undefined),
         patientId: patientId,
+        diagnosis: patient?.diagnosis || 'Clinical Dermatology Care Plan',
         notes: notes,
         items: medicines.map((m) => ({
           medicineName: m.name,

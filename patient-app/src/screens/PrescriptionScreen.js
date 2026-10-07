@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import {
   View,
   Text,
@@ -12,9 +12,70 @@ import { Colors } from '../theme/colors';
 import Header from '../components/Header';
 import MedicalDisclaimer from '../components/MedicalDisclaimer';
 import { mockPrescriptions } from '../services/mockData';
+import { AuthContext } from '../context/AuthContext';
 
 export default function PrescriptionScreen({ navigation, route }) {
-  const prescription = route?.params?.prescription || mockPrescriptions[0];
+  const { patient } = useContext(AuthContext);
+
+  const rawRx =
+    route?.params?.prescription ||
+    route?.params?.appointment?.consultation?.prescription ||
+    route?.params?.appointment?.prescription ||
+    mockPrescriptions[0];
+
+  const doctorName =
+    rawRx?.doctorName ||
+    (rawRx?.doctor?.user?.name
+      ? (rawRx.doctor.user.name.startsWith('Dr.') ? rawRx.doctor.user.name : `Dr. ${rawRx.doctor.user.name}`)
+      : null) ||
+    'Dr. Specialist';
+
+  const prescriptionDate =
+    rawRx?.date ||
+    (rawRx?.createdAt ? new Date(rawRx.createdAt).toLocaleDateString() : 'Today');
+
+  const diagnosis = rawRx?.diagnosis || 'Clinical Dermatology Care Plan';
+
+  const rawMeds = rawRx?.medicines || rawRx?.items || [];
+  const medicines = rawMeds.length > 0
+    ? rawMeds.map((m) => ({
+        name: m.medicineName || m.name || 'Prescribed Medicine',
+        dosage: m.dosage || 'Standard dose',
+        frequency: m.frequency || m.dosage || 'Twice daily',
+        duration: m.duration || '14 Days',
+        instructions: m.instructions || m.dosage || rawRx?.notes || 'Apply on clean skin as directed.',
+      }))
+    : [
+        {
+          name: 'Adapalene Gel 0.1%',
+          dosage: 'Pea-sized amount',
+          frequency: 'Once daily at bedtime',
+          duration: '30 Days',
+          instructions: 'Apply at night on clean, dry skin. Avoid sun exposure. Use sunscreen during the day.',
+        },
+      ];
+
+  const notes =
+    rawRx?.notes ||
+    'Apply medication as directed. Avoid harsh scrubbing, stay hydrated, and use oil-free moisturizer.';
+
+  const followUpDate = rawRx?.followUpDate || 'In 14 Days';
+
+  const patientDisplayName =
+    rawRx?.patient?.user?.name ||
+    rawRx?.patientName ||
+    patient?.name ||
+    'Patient';
+
+  const patientGender =
+    rawRx?.patient?.gender ||
+    patient?.gender ||
+    'Male';
+
+  const patientAge =
+    rawRx?.patient?.age ||
+    patient?.age ||
+    28;
 
   const handleDownload = () => {
     Alert.alert('Download Prescription', 'Digital Prescription PDF saved to your device downloads.', [
@@ -38,7 +99,7 @@ export default function PrescriptionScreen({ navigation, route }) {
           <View style={styles.docHeader}>
             <View style={{ flex: 1 }}>
               <Text style={styles.clinicTitle}>TeleDerma Telemedicine Network</Text>
-              <Text style={styles.doctorName}>{prescription.doctorName}</Text>
+              <Text style={styles.doctorName}>{doctorName}</Text>
               <Text style={styles.doctorSub}>MBBS, MD Dermatology • Reg. #MCI-74829</Text>
             </View>
             <View style={styles.rxBadgeCircle}>
@@ -52,24 +113,24 @@ export default function PrescriptionScreen({ navigation, route }) {
           <View style={styles.metaRow}>
             <View>
               <Text style={styles.metaLabel}>Patient Name</Text>
-              <Text style={styles.metaVal}>Rahul Sharma (28y / Male)</Text>
+              <Text style={styles.metaVal}>{patientDisplayName} ({patientAge}y / {patientGender})</Text>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
               <Text style={styles.metaLabel}>Prescription Date</Text>
-              <Text style={styles.metaVal}>{prescription.date}</Text>
+              <Text style={styles.metaVal}>{prescriptionDate}</Text>
             </View>
           </View>
 
           {/* Diagnosis */}
           <View style={styles.diagnosisBox}>
             <Text style={styles.diagnosisLabel}>CLINICAL DIAGNOSIS</Text>
-            <Text style={styles.diagnosisText}>{prescription.diagnosis}</Text>
+            <Text style={styles.diagnosisText}>{diagnosis}</Text>
           </View>
 
           {/* Medicines List */}
           <Text style={styles.sectionHeaderTitle}>Prescribed Medications (Rx)</Text>
 
-          {prescription.medicines.map((med, idx) => (
+          {medicines.map((med, idx) => (
             <View key={idx} style={styles.medCard}>
               <View style={styles.medNumberCircle}>
                 <Text style={styles.medNumberText}>{idx + 1}</Text>
@@ -90,14 +151,14 @@ export default function PrescriptionScreen({ navigation, route }) {
           {/* Doctor's Notes */}
           <View style={styles.notesBox}>
             <Text style={styles.notesTitle}>Doctor's Clinical Notes & Lifestyle Advice</Text>
-            <Text style={styles.notesContent}>{prescription.notes}</Text>
+            <Text style={styles.notesContent}>{notes}</Text>
           </View>
 
           {/* Follow-up Note */}
           <View style={styles.followUpCard}>
             <Text style={styles.followUpTitle}>Scheduled Follow-Up</Text>
             <Text style={styles.followUpDate}>
-              📅 Next Review: {prescription.followUpDate || '2026-10-15'} (14 Days)
+              📅 Next Review: {followUpDate}
             </Text>
           </View>
         </View>

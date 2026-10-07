@@ -70,6 +70,16 @@ const endConsultation = async (req, res, next) => {
     });
     emitToPatient(consultation.patientId, "consultation:ended", consultation);
     emitToDoctor(consultation.doctorId, "consultation:ended", consultation);
+    emitToPatient(consultation.patientId, "consultation:completed", consultation);
+    emitToDoctor(consultation.doctorId, "consultation:completed", consultation);
+    emitToPatient(consultation.patientId, "appointment:completed", {
+      appointmentId: consultation.appointmentId,
+      status: "COMPLETED",
+    });
+    emitToDoctor(consultation.doctorId, "appointment:completed", {
+      appointmentId: consultation.appointmentId,
+      status: "COMPLETED",
+    });
 
     return sendSuccess(res, "Consultation session ended", consultation);
   } catch (err) {

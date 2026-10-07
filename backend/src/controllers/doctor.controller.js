@@ -1,6 +1,6 @@
 const doctorService = require("../services/doctor.service");
 const { sendSuccess } = require("../utils/response");
-const { emitToRole } = require("../services/websocket.service");
+const { emitToRole, broadcast } = require("../services/websocket.service");
 
 // Doctor Self APIs
 const getMyProfile = async (req, res, next) => {
@@ -19,6 +19,7 @@ const updateMyProfile = async (req, res, next) => {
       isVerified: true,
     });
     emitToRole("PATIENT", "doctor:updated", updated);
+    broadcast("doctor:updated", updated);
     return sendSuccess(res, "Doctor profile updated successfully", updated);
   } catch (err) {
     return next(err);

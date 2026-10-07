@@ -2,11 +2,11 @@
 
 export const mockPatient = {
   id: 'pat-001',
-  name: 'Rahul Sharma',
+  name: 'Patient User',
   age: 28,
   gender: 'Male',
   phone: '+91 98765 43210',
-  email: 'rahul.sharma@example.com',
+  email: 'patient@example.com',
   bloodGroup: 'B+',
   city: 'Mumbai',
   allergies: ['Penicillin', 'Sulfa Drugs'],
@@ -15,7 +15,7 @@ export const mockPatient = {
   previousSkinProblems: ['Acne Vulgaris in teens', 'Contact dermatitis'],
   skinType: 'Combination / Oily T-zone',
   fitzpatrickScale: 'Type IV (Moderate Brown)',
-  avatarText: 'R',
+  avatarText: 'P',
 };
 
 export const mockDoctors = [

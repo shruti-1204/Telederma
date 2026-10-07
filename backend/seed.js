@@ -31,7 +31,6 @@ async function main() {
   console.log('=============================\n');
 
   const patientsData = [
-    { name: 'Rahul Sharma', phone: '1111111111', slotStart: new Date(Date.now() + 1000000), status: 'PENDING' },
     { name: 'Anita Verma', phone: '2222222222', slotStart: new Date(), status: 'CONFIRMED' },
     { name: 'Vikram Singh', phone: '3333333333', slotStart: new Date(Date.now() - 5000000), status: 'COMPLETED' },
     { name: 'Priya Desai', phone: '4444444444', slotStart: new Date(Date.now() + 86400000), status: 'PENDING' },
