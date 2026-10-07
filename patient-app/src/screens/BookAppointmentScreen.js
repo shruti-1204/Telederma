@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import {
   View,
+  Platform,
   Text,
   StyleSheet,
   ScrollView,
@@ -9,6 +10,7 @@ import {
   ActivityIndicator,
   Modal,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { Colors } from '../theme/colors';
 import Header from '../components/Header';
 import { mockDoctors } from '../services/mockData';
@@ -17,12 +19,24 @@ import api from '../services/api';
 import { socketService } from '../services/socketService';
 import { parseDoctorSlots } from '../utils/slotHelper';
 
-const DATES = [
-  { id: 'd1', label: 'Today', date: 'Oct 04', fullDate: '2026-10-04' },
-  { id: 'd2', label: 'Tomorrow', date: 'Oct 05', fullDate: '2026-10-05' },
-  { id: 'd3', label: 'Saturday', date: 'Oct 06', fullDate: '2026-10-06' },
-  { id: 'd4', label: 'Sunday', date: 'Oct 07', fullDate: '2026-10-07' },
-];
+const generateDates = () => {
+  const dates = [];
+  const today = new Date();
+  for (let i = 0; i < 3; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
+    const fullDate = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    let label = '';
+    if (i === 0) label = 'Today';
+    else if (i === 1) label = 'Tomorrow';
+    else label = d.toLocaleDateString('en-US', { weekday: 'short' });
+    dates.push({ id: 'd' + (i+1), label, date: dateStr, fullDate });
+  }
+  dates.push({ id: 'calendar', label: '📅 More', date: 'Select Date', isCalendar: true });
+  return dates;
+};
+const DATES = generateDates();
 
 export default function BookAppointmentScreen({ navigation, route }) {
   const incomingDoctor = route?.params?.doctor || mockDoctors[0];
@@ -45,6 +59,8 @@ export default function BookAppointmentScreen({ navigation, route }) {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('UPI');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [pickerDate, setPickerDate] = useState(new Date());
 
   // Real-time backend states
   const [bookedAppointment, setBookedAppointment] = useState(null);
@@ -69,8 +85,18 @@ export default function BookAppointmentScreen({ navigation, route }) {
     // Fetch freshest doctor slots directly from backend
     const fetchLiveDoctorSlots = async () => {
       try {
-        if (!incomingDoctor?.id) return;
-        const res = await api.get(`/doctors/${incomingDoctor.id}`);
+        let fetchId = incomingDoctor?.id;
+        if (!fetchId || fetchId.length < 10) {
+          try {
+            const docsRes = await api.get('/doctors');
+            if (docsRes.data?.data && docsRes.data.data.length > 0) {
+              fetchId = docsRes.data.data[0].id;
+            }
+          } catch(e) {}
+        }
+        if (!fetchId) return;
+        
+        const res = await api.get(`/doctors/${fetchId}`);
         if (res.data?.data) {
           const liveDoc = res.data.data;
           if (liveDoc.availableSlots) {
@@ -181,30 +207,27 @@ export default function BookAppointmentScreen({ navigation, route }) {
 
       // 3. Post to Backend REST API with collision-free slot retry
       let apptData = null;
-      let slotOffsetMinutes = 0;
-      for (let attempt = 0; attempt < 6; attempt++) {
-        try {
-          const tryStart = new Date(start.getTime() + slotOffsetMinutes * 60 * 1000);
-          const tryEnd = new Date(tryStart.getTime() + 30 * 60 * 1000);
-          const res = await api.post('/appointments', {
-            doctorId: targetDoctorId,
-            slotStart: tryStart.toISOString(),
-            slotEnd: tryEnd.toISOString(),
-          });
-          apptData = res.data?.data;
-          if (apptData) {
-            console.log('[PatientApp] Live appointment booked in DB:', apptData.id);
-            break;
-          }
-        } catch (postErr) {
-          if (postErr.response?.status === 409) {
-            slotOffsetMinutes += 45; // Try next window if conflicting slot
-          } else {
-            console.warn('Booking post error:', postErr.response?.data || postErr.message);
-            break;
+      try {
+        const tryStart = new Date(start.getTime());
+        const tryEnd = new Date(tryStart.getTime() + 30 * 60 * 1000);
+        const res = await api.post('/appointments', {
+          doctorId: targetDoctorId,
+          slotStart: tryStart.toISOString(),
+          slotEnd: tryEnd.toISOString(),
+        });
+        apptData = res.data?.data;
+        if (apptData) {
+          console.log('[PatientApp] Live appointment booked in DB:', apptData.id);
+        }
+      } catch (postErr) {
+        if (postErr.response?.status === 409) {
+          alert('This slot is already booked. Please select a different time.');
+          setIsProcessingPayment(false);
+          return;
+        } else {
+          console.warn('Booking post error:', postErr.response?.data || postErr.message);
           }
         }
-      }
 
       if (apptData) {
         setBookedAppointment(apptData);
@@ -254,7 +277,7 @@ export default function BookAppointmentScreen({ navigation, route }) {
                 <TouchableOpacity
                   key={item.id}
                   style={[styles.dateCard, isSelected && styles.dateCardSelected]}
-                  onPress={() => setSelectedDate(item)}
+                  onPress={() => { if(item.isCalendar){ setShowDatePicker(true); } else { setSelectedDate(item); } }}
                 >
                   <Text style={[styles.dateDay, isSelected && styles.dateDaySelected]}>
                     {item.label}
@@ -339,10 +362,10 @@ export default function BookAppointmentScreen({ navigation, route }) {
         {/* Proceed to Payment CTA */}
         <TouchableOpacity
           style={styles.proceedPayBtn}
-          onPress={() => setShowPaymentModal(true)}
+          onPress={() => { setShowPaymentModal(true); handlePayNow(); }}
           activeOpacity={0.8}
         >
-          <Text style={styles.proceedPayBtnText}>Proceed to Payment (₹{doctor.fee}) ➔</Text>
+          <Text style={styles.proceedPayBtnText}>{isProcessingPayment ? "Booking..." : "Confirm Appointment ➔"}</Text>
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />
@@ -353,65 +376,12 @@ export default function BookAppointmentScreen({ navigation, route }) {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             {!paymentSuccess ? (
-              <>
-                <View style={styles.modalHeader}>
-                  <View style={styles.razorpayBadge}>
-                    <Text style={styles.razorpayText}>💳 Razorpay Secure Checkout</Text>
-                  </View>
-                  <TouchableOpacity onPress={() => setShowPaymentModal(false)}>
-                    <Text style={{ fontSize: 18, color: Colors.textMuted }}>✕</Text>
-                  </TouchableOpacity>
+                <View style={{alignItems: "center", padding: 20}}>
+                  <ActivityIndicator size="large" color="#0F967E" />
+                  <Text style={{marginTop: 10, fontWeight: "bold"}}>Booking Appointment...</Text>
                 </View>
-
-                <View style={styles.modalDoctorInfo}>
-                  <Text style={styles.modalDocName}>Payment for {doctor.name}</Text>
-                  <Text style={styles.modalAmount}>₹{doctor.fee}</Text>
-                </View>
-
-                <Text style={styles.paymentMethodTitle}>Select Payment Method</Text>
-
-                {/* Payment Options */}
-                {['UPI (Google Pay / PhonePe / Paytm)', 'Credit / Debit Card', 'Net Banking'].map(
-                  (method) => (
-                    <TouchableOpacity
-                      key={method}
-                      style={[
-                        styles.payMethodOption,
-                        selectedPaymentMethod === method && styles.payMethodOptionSelected,
-                      ]}
-                      onPress={() => setSelectedPaymentMethod(method)}
-                    >
-                      <Text
-                        style={[
-                          styles.payMethodText,
-                          selectedPaymentMethod === method && styles.payMethodTextSelected,
-                        ]}
-                      >
-                        {method}
-                      </Text>
-                      <Text style={{ fontSize: 14, color: selectedPaymentMethod === method ? Colors.primary : Colors.textMuted }}>
-                        {selectedPaymentMethod === method ? '●' : '○'}
-                      </Text>
-                    </TouchableOpacity>
-                  )
-                )}
-
-                <TouchableOpacity
-                  style={styles.confirmPayBtn}
-                  onPress={handlePayNow}
-                  disabled={isProcessingPayment}
-                >
-                  {isProcessingPayment ? (
-                    <ActivityIndicator color="#FFFFFF" />
-                  ) : (
-                    <Text style={styles.confirmPayBtnText}>Pay ₹{doctor.fee} Securely</Text>
-                  )}
-                </TouchableOpacity>
-
-                <Text style={styles.securityNote}>🔒 256-Bit SSL Encrypted Healthcare Payment</Text>
-              </>
-            ) : (
-              /* Success Screen */
+              ) : (
+                /* Success Screen */
               <View style={styles.successBox}>
                 <View style={[styles.successIconCircle, isDoctorConfirmed && { backgroundColor: '#D1FAE5' }]}>
                   <Text style={{ fontSize: 36 }}>{isDoctorConfirmed ? '✓' : '⚡'}</Text>
@@ -461,45 +431,77 @@ export default function BookAppointmentScreen({ navigation, route }) {
                   <Text style={styles.confirmedDetail}>🔗 WebRTC Room: {meetRoomId}</Text>
                 </View>
 
-                <TouchableOpacity
-                  style={[
-                    styles.enterCallNowBtn,
-                    !isDoctorConfirmed && { backgroundColor: '#0B6E69' }
-                  ]}
-                  onPress={() => {
-                    setShowPaymentModal(false);
-                    navigation.navigate('VideoCall', {
-                      appointment: {
-                        id: bookedAppointment?.id,
-                        doctorName: doctor.name,
-                        doctorSpecialization: doctor.specialization,
-                        date: selectedDate.fullDate,
-                        time: selectedSlot?.time,
-                        meetRoomId: meetRoomId,
-                        consultationId: bookedAppointment?.consultation?.id,
-                      },
-                    });
-                  }}
-                >
-                  <Text style={styles.enterCallNowBtnText}>
-                    {isDoctorConfirmed ? '🎥 Join Live Video Consultation Room ➔' : '🎥 Enter Waiting Room ➔'}
-                  </Text>
-                </TouchableOpacity>
+                
 
                 <TouchableOpacity
                   style={styles.viewAllApptsBtn}
                   onPress={() => {
                     setShowPaymentModal(false);
-                    navigation.navigate('MedicalRecords');
+                    navigation.navigate('Dashboard');
                   }}
                 >
-                  <Text style={styles.viewAllApptsBtnText}>View My Appointments</Text>
+                  <Text style={styles.viewAllApptsBtnText}>Go to Dashboard</Text>
                 </TouchableOpacity>
               </View>
             )}
           </View>
         </View>
       </Modal>
+
+        {showDatePicker && Platform.OS !== 'web' && (
+          <DateTimePicker
+            value={pickerDate}
+            mode="date"
+            display="default"
+            minimumDate={new Date()}
+            onChange={(event, date) => {
+              setShowDatePicker(false);
+              if (date) {
+                setPickerDate(date);
+                const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
+                const fullDate = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+                const label = date.toLocaleDateString('en-US', { weekday: 'long' });
+                setSelectedDate({ id: 'custom', label, date: dateStr, fullDate });
+              }
+            }}
+          />
+        )}
+        {showDatePicker && Platform.OS === 'web' && (
+          <Modal visible={true} transparent>
+            <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
+              <View style={{ backgroundColor: '#fff', padding: 20, borderRadius: 12, width: '80%', maxWidth: 400 }}>
+                <Text style={{ fontWeight: 'bold', marginBottom: 10, fontSize: 16 }}>Select Date 📅</Text>
+                
+                <div style={{ width: '100%' }}>
+                  <input 
+                    type="date" 
+                    min={new Date().toISOString().split('T')[0]}
+                    style={{ padding: 12, fontSize: 16, width: '100%', borderRadius: 8, border: '1px solid #ccc' }}
+                    onChange={(e) => {
+                      if(e.target.value) {
+                        const date = new Date(e.target.value);
+                        setPickerDate(date);
+                        const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
+                        const fullDate = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+                        const label = date.toLocaleDateString('en-US', { weekday: 'long' });
+                        setSelectedDate({ id: 'custom', label, date: dateStr, fullDate });
+                      }
+                      setShowDatePicker(false);
+                    }}
+                  />
+                </div>
+                
+                <TouchableOpacity 
+                  onPress={() => setShowDatePicker(false)}
+                  style={{ marginTop: 20, width: '100%', padding: 12, backgroundColor: '#94A3B8', borderRadius: 8, alignItems: 'center' }}
+                >
+                  <Text style={{ color: '#fff', fontWeight: 'bold' }}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
+        )}
+
     </SafeAreaView>
   );
 }

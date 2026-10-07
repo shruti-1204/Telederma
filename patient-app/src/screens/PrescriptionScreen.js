@@ -1,4 +1,4 @@
-import React, { useContext } from 'react';
+﻿import React, { useContext, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,420 +6,336 @@ import {
   ScrollView,
   TouchableOpacity,
   SafeAreaView,
+  ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
 import { Colors } from '../theme/colors';
 import Header from '../components/Header';
 import MedicalDisclaimer from '../components/MedicalDisclaimer';
 import { mockPrescriptions } from '../services/mockData';
 import { AuthContext } from '../context/AuthContext';
+import api from '../services/api';
 
 export default function PrescriptionScreen({ navigation, route }) {
   const { patient } = useContext(AuthContext);
-
-  const rawRx =
+  
+  const initialRx =
     route?.params?.prescription ||
     route?.params?.appointment?.consultation?.prescription ||
     route?.params?.appointment?.prescription ||
     mockPrescriptions[0];
+
+  const [rawRx, setRawRx] = useState(initialRx);
+  const [loading, setLoading] = useState(false);
+  const [showPostPaymentOptions, setShowPostPaymentOptions] = useState(false);
+  const [shouldPrint, setShouldPrint] = useState(false);
+
+  useEffect(() => {
+    const fetchPrescription = async () => {
+      const apptId = route?.params?.appointment?.id;
+      if (apptId) {
+        try {
+          setLoading(true);
+          const res = await api.get('/prescriptions');
+          const allRx = res.data?.data || [];
+          const matched = allRx.find(rx => rx.consultation?.appointmentId === apptId);
+          if (matched) {
+            setRawRx(matched);
+          }
+        } catch (e) {
+          console.warn("Failed to fetch prescription:", e.message);
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+    fetchPrescription();
+  }, [route?.params?.appointment?.id]);
+
+  useEffect(() => {
+    if (shouldPrint && !showPostPaymentOptions && !loading) {
+      const timer = setTimeout(() => {
+        if (Platform.OS === 'web') {
+          window.print();
+        } else {
+          Alert.alert('PDF', 'PDF download will be supported in native Android build.');
+        }
+        setShouldPrint(false);
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [shouldPrint, showPostPaymentOptions, loading]);
+
+  const isPaid = rawRx?.consultation?.appointment?.paymentStatus === 'COMPLETED' || route?.params?.isPaid === true || false;
+
+  const handlePayForPrescription = () => {
+    setRawRx({ ...rawRx, consultation: { ...rawRx.consultation, appointment: { ...rawRx.consultation?.appointment, paymentStatus: 'COMPLETED' } } });
+    setShowPostPaymentOptions(true);
+  };
+
+  if (!loading && rawRx && !isPaid) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <Header title="e-Prescription Locked" onBack={() => navigation.goBack()} />
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <Text style={{ fontSize: 24, fontWeight: 'bold', color: Colors.primary, marginBottom: 15 }}>Payment Required 🔒</Text>
+          <Text style={{ textAlign: 'center', color: Colors.text, marginBottom: 30, fontSize: 16 }}>
+            Your consultation is complete. Please pay the consultation fee to view and download your digital prescription.
+          </Text>
+          <TouchableOpacity 
+            style={{ backgroundColor: Colors.primary, padding: 18, borderRadius: 12, width: '100%', alignItems: 'center', elevation: 3 }}
+            onPress={handlePayForPrescription}
+          >
+            <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>Pay Now to Unlock</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (showPostPaymentOptions) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <Header title="Payment Successful" onBack={() => navigation.goBack()} />
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#d1fae5', justifyContent: 'center', alignItems: 'center', marginBottom: 20 }}>
+            <Text style={{ fontSize: 40 }}>✅</Text>
+          </View>
+          <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#065f46', marginBottom: 10 }}>Payment Done!</Text>
+          <Text style={{ textAlign: 'center', color: Colors.text, marginBottom: 40, fontSize: 16 }}>
+            Your prescription has been unlocked successfully.
+          </Text>
+          
+          <TouchableOpacity 
+            style={{ backgroundColor: Colors.primary, padding: 16, borderRadius: 12, width: '100%', alignItems: 'center', marginBottom: 15 }}
+            onPress={() => {
+              setShowPostPaymentOptions(false);
+              setShouldPrint(true);
+            }}
+          >
+            <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>View & Auto-Print 📄</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const doctorName =
     rawRx?.doctorName ||
     (rawRx?.doctor?.user?.name
       ? (rawRx.doctor.user.name.startsWith('Dr.') ? rawRx.doctor.user.name : `Dr. ${rawRx.doctor.user.name}`)
       : null) ||
-    'Dr. Specialist';
+    'Dr. Kundan Ashok Kharde';
 
-  const prescriptionDate =
-    rawRx?.date ||
-    (rawRx?.createdAt ? new Date(rawRx.createdAt).toLocaleDateString() : 'Today');
-
-  const diagnosis = rawRx?.diagnosis || 'Clinical Dermatology Care Plan';
-
-  const rawMeds = rawRx?.medicines || rawRx?.items || [];
-  const medicines = rawMeds.length > 0
-    ? rawMeds.map((m) => ({
-        name: m.medicineName || m.name || 'Prescribed Medicine',
-        dosage: m.dosage || 'Standard dose',
-        frequency: m.frequency || m.dosage || 'Twice daily',
-        duration: m.duration || '14 Days',
-        instructions: m.instructions || m.dosage || rawRx?.notes || 'Apply on clean skin as directed.',
-      }))
-    : [
-        {
-          name: 'Adapalene Gel 0.1%',
-          dosage: 'Pea-sized amount',
-          frequency: 'Once daily at bedtime',
-          duration: '30 Days',
-          instructions: 'Apply at night on clean, dry skin. Avoid sun exposure. Use sunscreen during the day.',
-        },
-      ];
-
-  const notes =
-    rawRx?.notes ||
-    'Apply medication as directed. Avoid harsh scrubbing, stay hydrated, and use oil-free moisturizer.';
-
-  const followUpDate = rawRx?.followUpDate || 'In 14 Days';
-
-  const patientDisplayName =
-    rawRx?.patient?.user?.name ||
-    rawRx?.patientName ||
-    patient?.name ||
-    'Patient';
-
-  const patientGender =
-    rawRx?.patient?.gender ||
-    patient?.gender ||
-    'Male';
-
-  const patientAge =
-    rawRx?.patient?.age ||
-    patient?.age ||
-    28;
-
-  const handleDownload = () => {
-    Alert.alert('Download Prescription', 'Digital Prescription PDF saved to your device downloads.', [
-      { text: 'OK' },
-    ]);
-  };
+  const rxDate = rawRx?.date || new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  const medicines = rawRx?.items || rawRx?.medicines || [];
+  const notes = rawRx?.notes || 'No additional notes provided.';
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <Header navigation={navigation} />
+    <SafeAreaView style={styles.safeArea}>
+      <Header title="e-Prescription" onBack={() => navigation.goBack()} />
+      {loading ? (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+           <ActivityIndicator size="large" color={Colors.primary} />
+           <Text style={{ marginTop: 10, color: Colors.text }}>Fetching latest prescription...</Text>
+        </View>
+      ) : (
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <MedicalDisclaimer />
 
-      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Back Link */}
-        <TouchableOpacity style={styles.backLink} onPress={() => navigation.goBack()}>
-          <Text style={styles.backLinkText}>← Back to Records</Text>
-        </TouchableOpacity>
-
-        {/* Prescription Document Card */}
-        <View style={styles.rxDocumentCard}>
-          {/* Header of Prescription */}
-          <View style={styles.docHeader}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.clinicTitle}>TeleDerma Telemedicine Network</Text>
-              <Text style={styles.doctorName}>{doctorName}</Text>
-              <Text style={styles.doctorSub}>MBBS, MD Dermatology • Reg. #MCI-74829</Text>
-            </View>
-            <View style={styles.rxBadgeCircle}>
-              <Text style={styles.rxBadgeText}>℞</Text>
-            </View>
-          </View>
-
+        {/* Doctor & Patient Info Header */}
+        <View style={styles.rxHeaderCard}>
+          <Text style={styles.clinicTitle}>Telederma Digital Rx</Text>
           <View style={styles.divider} />
-
-          {/* Patient & Date Meta */}
-          <View style={styles.metaRow}>
-            <View>
-              <Text style={styles.metaLabel}>Patient Name</Text>
-              <Text style={styles.metaVal}>{patientDisplayName} ({patientAge}y / {patientGender})</Text>
-            </View>
-            <View style={{ alignItems: 'flex-end' }}>
-              <Text style={styles.metaLabel}>Prescription Date</Text>
-              <Text style={styles.metaVal}>{prescriptionDate}</Text>
-            </View>
+          
+          <Text style={styles.docName}>{doctorName}</Text>
+          <Text style={styles.docSpec}>Dermatologist, MBBS MD</Text>
+          
+          <View style={[styles.divider, { marginVertical: 12 }]} />
+          
+          <View style={styles.patientInfoRow}>
+            <Text style={styles.patientInfoLabel}>Patient:</Text>
+            <Text style={styles.patientInfoValue}>{patient?.name || 'Gourav Bhatia'}</Text>
           </View>
-
-          {/* Diagnosis */}
-          <View style={styles.diagnosisBox}>
-            <Text style={styles.diagnosisLabel}>CLINICAL DIAGNOSIS</Text>
-            <Text style={styles.diagnosisText}>{diagnosis}</Text>
+          <View style={styles.patientInfoRow}>
+            <Text style={styles.patientInfoLabel}>Date:</Text>
+            <Text style={styles.patientInfoValue}>{rxDate}</Text>
           </View>
-
-          {/* Medicines List */}
-          <Text style={styles.sectionHeaderTitle}>Prescribed Medications (Rx)</Text>
-
-          {medicines.map((med, idx) => (
-            <View key={idx} style={styles.medCard}>
-              <View style={styles.medNumberCircle}>
-                <Text style={styles.medNumberText}>{idx + 1}</Text>
-              </View>
-              <View style={styles.medDetailCol}>
-                <Text style={styles.medTitle}>{med.name}</Text>
-                <Text style={styles.medDosageFrequency}>
-                  Dosage: {med.dosage} • Frequency: {med.frequency}
-                </Text>
-                <Text style={styles.medDuration}>Duration: {med.duration}</Text>
-                <View style={styles.instructionsBox}>
-                  <Text style={styles.instructionsText}>📌 {med.instructions}</Text>
-                </View>
-              </View>
-            </View>
-          ))}
-
-          {/* Doctor's Notes */}
-          <View style={styles.notesBox}>
-            <Text style={styles.notesTitle}>Doctor's Clinical Notes & Lifestyle Advice</Text>
-            <Text style={styles.notesContent}>{notes}</Text>
-          </View>
-
-          {/* Follow-up Note */}
-          <View style={styles.followUpCard}>
-            <Text style={styles.followUpTitle}>Scheduled Follow-Up</Text>
-            <Text style={styles.followUpDate}>
-              📅 Next Review: {followUpDate}
-            </Text>
+          <View style={styles.patientInfoRow}>
+            <Text style={styles.patientInfoLabel}>Consult ID:</Text>
+            <Text style={styles.patientInfoValue}>{rawRx?.consultationId || rawRx?.id || 'RX-LIVE-101'}</Text>
           </View>
         </View>
 
-        <MedicalDisclaimer compact={true} />
+        {/* Medicines List */}
+        <Text style={styles.sectionTitle}>Prescribed Medicines</Text>
+        {medicines.map((med, index) => (
+          <View key={index} style={styles.medCard}>
+            <Text style={styles.medName}>💊 {med.medicineName || med.name}</Text>
+            <View style={styles.medDetailsRow}>
+              <View style={styles.medDetailBox}>
+                <Text style={styles.medDetailLabel}>Dosage</Text>
+                <Text style={styles.medDetailValue}>{med.dosage}</Text>
+              </View>
+              <View style={styles.medDetailBox}>
+                <Text style={styles.medDetailLabel}>Duration</Text>
+                <Text style={styles.medDetailValue}>{med.duration}</Text>
+              </View>
+            </View>
+            <View style={styles.medInstructionsBox}>
+              <Text style={styles.medInstructionsLabel}>Instructions:</Text>
+              <Text style={styles.medInstructionsText}>{med.instructions || 'Take as directed.'}</Text>
+            </View>
+          </View>
+        ))}
 
-        {/* Action Buttons */}
-        <TouchableOpacity style={styles.downloadBtn} onPress={handleDownload} activeOpacity={0.8}>
-          <Text style={styles.downloadBtnText}>📥 Download Prescription (PDF)</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.finderBtn}
-          onPress={() => navigation.navigate('MedicineFinder')}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.finderBtnText}>💊 Compare Alternative Brands in Finder ➔</Text>
-        </TouchableOpacity>
-
-        <View style={{ height: 40 }} />
+        {/* Doctor Notes */}
+        <Text style={styles.sectionTitle}>Doctor's Advice & Notes</Text>
+        <View style={styles.notesCard}>
+          <Text style={styles.notesText}>{notes}</Text>
+        </View>
+        
+        <View style={{height: 40}} />
       </ScrollView>
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  container: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-  },
-  backLink: {
-    marginBottom: 10,
-  },
-  backLinkText: {
-    fontSize: 13,
-    color: Colors.primary,
-    fontWeight: '700',
-  },
-  rxDocumentCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: 16,
+  safeArea: { flex: 1, backgroundColor: Colors.background },
+  scrollContent: { padding: 16 },
+  rxHeaderCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 20,
     borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 18,
-    marginBottom: 12,
+    borderColor: '#E2E8F0',
     shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  docHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 2,
   },
   clinicTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: Colors.secondary,
-    letterSpacing: 0.5,
-    marginBottom: 2,
-  },
-  doctorName: {
     fontSize: 18,
     fontWeight: '800',
-    color: Colors.textDark,
-  },
-  doctorSub: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-    marginTop: 2,
-  },
-  rxBadgeCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.primaryLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  rxBadgeText: {
-    fontSize: 22,
-    fontWeight: '900',
     color: Colors.primary,
+    textAlign: 'center',
+    marginBottom: 10,
+    letterSpacing: 0.5,
   },
   divider: {
     height: 1,
-    backgroundColor: Colors.border,
-    marginVertical: 12,
+    backgroundColor: '#E2E8F0',
   },
-  metaRow: {
+  docName: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  docSpec: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  patientInfoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    backgroundColor: Colors.background,
-    padding: 10,
-    borderRadius: 8,
-    marginBottom: 12,
+    marginBottom: 6,
   },
-  metaLabel: {
-    fontSize: 10,
-    color: Colors.textSecondary,
+  patientInfoLabel: {
+    fontSize: 14,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  patientInfoValue: {
+    fontSize: 14,
+    color: '#1E293B',
     fontWeight: '600',
   },
-  metaVal: {
-    fontSize: 12,
+  sectionTitle: {
+    fontSize: 18,
     fontWeight: '700',
-    color: Colors.textDark,
-    marginTop: 2,
-  },
-  diagnosisBox: {
-    backgroundColor: '#EEF2FF',
-    borderRadius: 8,
-    padding: 10,
-    borderLeftWidth: 4,
-    borderLeftColor: Colors.primary,
-    marginBottom: 16,
-  },
-  diagnosisLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: Colors.primary,
-    letterSpacing: 0.5,
-  },
-  diagnosisText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.textDark,
-    marginTop: 2,
-  },
-  sectionHeaderTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: Colors.textDark,
-    marginBottom: 10,
+    color: '#0F172A',
+    marginBottom: 12,
+    marginTop: 10,
   },
   medCard: {
-    flexDirection: 'row',
-    backgroundColor: Colors.background,
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
-  },
-  medNumberCircle: {
-    width: 24,
-    height: 24,
+    backgroundColor: '#fff',
     borderRadius: 12,
-    backgroundColor: Colors.secondary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
-  },
-  medNumberText: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-    fontSize: 11,
-  },
-  medDetailCol: {
-    flex: 1,
-  },
-  medTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.textDark,
-  },
-  medDosageFrequency: {
-    fontSize: 12,
-    color: Colors.textDark,
-    fontWeight: '500',
-    marginTop: 2,
-  },
-  medDuration: {
-    fontSize: 12,
-    color: Colors.secondary,
-    fontWeight: '600',
-    marginTop: 1,
-  },
-  instructionsBox: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 6,
-    padding: 6,
-    marginTop: 6,
-  },
-  instructionsText: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-    lineHeight: 15,
-  },
-  notesBox: {
-    backgroundColor: '#FFFBEB',
+    padding: 16,
+    marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#FDE68A',
-    borderRadius: 10,
-    padding: 12,
-    marginTop: 10,
+    borderColor: '#E2E8F0',
+    borderLeftWidth: 4,
+    borderLeftColor: Colors.primary,
   },
-  notesTitle: {
-    fontSize: 12,
+  medName: {
+    fontSize: 16,
     fontWeight: '700',
-    color: '#B45309',
+    color: '#1E293B',
+    marginBottom: 12,
+  },
+  medDetailsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+  },
+  medDetailBox: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  medDetailLabel: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '600',
+    textTransform: 'uppercase',
     marginBottom: 4,
   },
-  notesContent: {
-    fontSize: 12,
-    color: '#78350F',
-    lineHeight: 17,
-  },
-  followUpCard: {
-    backgroundColor: '#F0FDF4',
-    borderWidth: 1,
-    borderColor: '#BBF7D0',
-    borderRadius: 10,
-    padding: 10,
-    marginTop: 10,
-  },
-  followUpTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#15803D',
-  },
-  followUpDate: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#166534',
-    marginTop: 2,
-  },
-  downloadBtn: {
-    backgroundColor: Colors.primary,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginBottom: 10,
-    shadowColor: Colors.primary,
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  downloadBtnText: {
-    color: '#FFFFFF',
+  medDetailValue: {
     fontSize: 14,
-    fontWeight: '800',
-  },
-  finderBtn: {
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.accentOrange,
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  finderBtnText: {
-    color: Colors.accentOrange,
-    fontSize: 13,
+    color: '#0F172A',
     fontWeight: '700',
   },
+  medInstructionsBox: {
+    backgroundColor: '#FFFBEB',
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FEF3C7',
+  },
+  medInstructionsLabel: {
+    fontSize: 12,
+    color: '#92400E',
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  medInstructionsText: {
+    fontSize: 13,
+    color: '#92400E',
+    fontWeight: '500',
+  },
+  notesCard: {
+    backgroundColor: '#F0FDF4',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#DCFCE7',
+    marginBottom: 20,
+  },
+  notesText: {
+    fontSize: 15,
+    color: '#166534',
+    lineHeight: 22,
+  }
 });

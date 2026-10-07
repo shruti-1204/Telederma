@@ -103,7 +103,7 @@ export default function MedicalRecordsScreen({ navigation }) {
             id: a.id,
             doctorName: cleanDocName,
             doctorSpecialization: a.doctor?.specialization || 'Clinical Dermatology',
-            date: new Date(a.slotStart || a.createdAt).toLocaleDateString(),
+            date: new Date(a.slotStart || a.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
             time: new Date(a.slotStart || a.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             fee: a.doctor?.fee || 600,
             status: isCompleted ? 'COMPLETED' : a.status,
@@ -130,7 +130,7 @@ export default function MedicalRecordsScreen({ navigation }) {
           return {
             id: r.id,
             doctorName: cleanDocName,
-            date: new Date(r.createdAt).toLocaleDateString(),
+            date: new Date(r.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
             diagnosis: r.diagnosis || 'Clinical Dermatology Care Plan',
             medicines: (r.items || []).map((i) => ({
               name: i.medicineName,

@@ -32,4 +32,19 @@ router.get(
   paymentController.getPaymentById
 );
 
+
+router.post('/mock-success', requireAuth, async (req, res, next) => {
+  try {
+    const { PrismaClient } = require('@prisma/client');
+    const prisma = new PrismaClient();
+    await prisma.appointment.update({
+      where: { id: req.body.appointmentId },
+      data: { paymentStatus: 'COMPLETED' }
+    });
+    res.json({ success: true });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;
+
+

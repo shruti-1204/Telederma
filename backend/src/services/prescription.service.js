@@ -212,7 +212,7 @@ const getPatientPrescriptions = async (patientId) => {
         include: { user: { select: { id: true, name: true, phone: true } } },
       },
       consultation: {
-        select: { id: true, status: true, startedAt: true, endedAt: true, appointmentId: true },
+        select: { id: true, status: true, startedAt: true, endedAt: true, appointmentId: true, appointment: { select: { paymentStatus: true, status: true } } },
       },
     },
     orderBy: { createdAt: "desc" },
@@ -228,7 +228,7 @@ const getDoctorPrescriptions = async (doctorId) => {
         include: { user: { select: { id: true, name: true, phone: true } } },
       },
       consultation: {
-        select: { id: true, status: true, startedAt: true, endedAt: true, appointmentId: true },
+        select: { id: true, status: true, startedAt: true, endedAt: true, appointmentId: true, appointment: { select: { paymentStatus: true, status: true } } },
       },
     },
     orderBy: { createdAt: "desc" },
@@ -241,3 +241,5 @@ module.exports = {
   getPatientPrescriptions,
   getDoctorPrescriptions,
 };
+
+

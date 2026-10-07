@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   SafeAreaView,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Colors } from '../theme/colors';
 import { AuthContext } from '../context/AuthContext';
@@ -25,7 +26,7 @@ export default function DashboardScreen({ navigation }) {
 
   const [registeredDoctors, setRegisteredDoctors] = useState([]);
   const [loadingDoctors, setLoadingDoctors] = useState(true);
-  const [latestAppointment, setLatestAppointment] = useState(null);
+  const [activeAppointments, setActiveAppointments] = useState([]);
   const [latestPrescription, setLatestPrescription] = useState(null);
 
   useEffect(() => {
@@ -49,7 +50,7 @@ export default function DashboardScreen({ navigation }) {
 
     const unsubConfAppt = socketService.on('appointment:confirmed', (appt) => {
       console.log('[Dashboard] Live appointment:confirmed received:', appt);
-      setLatestAppointment((prev) => (prev ? { ...prev, status: 'CONFIRMED' } : appt));
+      setActiveAppointments((prev) => prev.map(a => a.id === appt.id ? { ...a, status: 'CONFIRMED' } : a));
     });
 
     const unsubApptComp = socketService.on('appointment:completed', () => {
@@ -66,7 +67,7 @@ export default function DashboardScreen({ navigation }) {
 
     const unsubReady = socketService.on('consultation:ready', (data) => {
       console.log('[Dashboard] Live consultation:ready received:', data);
-      setLatestAppointment((prev) => (prev ? { ...prev, consultationReady: true, roomId: data.roomId } : prev));
+      setActiveAppointments((prev) => prev.map(a => a.id === data.appointmentId ? { ...a, consultationReady: true, roomId: data.roomId } : a));
     });
 
     const unsubRx = socketService.on('prescription:new', (rx) => {
@@ -138,21 +139,20 @@ export default function DashboardScreen({ navigation }) {
     try {
       const res = await api.get('/appointments');
       if (res.data?.data && res.data.data.length > 0) {
-        // Find most recent active appointment (only CONFIRMED or PENDING, not COMPLETED)
         const sorted = res.data.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        const active = sorted.find(
+        const active = sorted.filter(
           (a) =>
             (a.status === 'CONFIRMED' || a.status === 'PENDING') &&
             a.status !== 'COMPLETED' &&
             a.consultation?.status !== 'COMPLETED'
         );
-        setLatestAppointment(active || null);
+        setActiveAppointments(active);
       } else {
-        setLatestAppointment(null);
+        setActiveAppointments([]);
       }
     } catch (err) {
       console.warn('Dashboard fetch appointment warning:', err.message);
-      setLatestAppointment(null);
+      setActiveAppointments([]);
     }
   };
 
@@ -176,42 +176,6 @@ export default function DashboardScreen({ navigation }) {
     setSelectedDoctor(doc);
     navigation.navigate('BookAppointment', { doctor: doc });
   };
-
-  const getUpcomingAppointmentDisplay = () => {
-    if (latestAppointment) {
-      const dName = latestAppointment.doctor?.user?.name || 'Dr. Kundan Ashok Kharde';
-      const cleanDocName = dName.startsWith('Dr.') ? dName : `Dr. ${dName}`;
-      const slotTime = latestAppointment.slotStart
-        ? new Date(latestAppointment.slotStart).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        : '10:00 AM';
-      const isConfirmed = latestAppointment.status === 'CONFIRMED';
-      return {
-        hasActive: true,
-        doctorName: cleanDocName,
-        timeString: `Today at ${slotTime}`,
-        statusText: isConfirmed ? '🟢 CONFIRMED' : '🟡 AWAITING DOCTOR',
-        isConfirmed,
-        data: {
-          id: latestAppointment.id,
-          doctorName: cleanDocName,
-          doctorSpecialization: latestAppointment.doctor?.specialization || 'Clinical Dermatology',
-          date: latestAppointment.slotStart ? latestAppointment.slotStart.split('T')[0] : 'Today',
-          time: slotTime,
-          meetRoomId: latestAppointment.roomId || `room_${latestAppointment.id}`,
-        },
-      };
-    }
-    return {
-      hasActive: false,
-      doctorName: 'No Upcoming Consultations',
-      timeString: 'Active queue is clear',
-      statusText: '✓ ALL CLEAR',
-      isConfirmed: false,
-      data: null,
-    };
-  };
-
-  const upcomingInfo = getUpcomingAppointmentDisplay();
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -367,41 +331,69 @@ export default function DashboardScreen({ navigation }) {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.summaryCardsRow}
           >
-            {/* Card 1: Upcoming Appointment / Active Queue */}
-            <View style={styles.summaryCard}>
-              <View style={styles.summaryHeaderRow}>
-                <Text style={styles.summaryBadgeLabel}>
-                  {upcomingInfo.hasActive ? `📅 ${upcomingInfo.statusText}` : '✓ NO ACTIVE CALL'}
-                </Text>
+            {/* Card 1: Upcoming Appointments / Active Queue */}
+            {activeAppointments.length > 0 ? (
+              activeAppointments.map(appt => {
+                const dName = appt.doctor?.user?.name || 'Dr. Specialist';
+                const cleanDocName = dName.startsWith('Dr.') ? dName : `Dr. ${dName}`;
+                const slotTime = appt.slotStart
+                  ? new Date(appt.slotStart).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                  : '10:00 AM';
+                const slotDate = appt.slotStart
+                  ? new Date(appt.slotStart).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                  : 'Today';
+                const isConfirmed = appt.status === 'CONFIRMED';
+                return (
+                  <View key={appt.id} style={styles.summaryCard}>
+                    <View style={styles.summaryHeaderRow}>
+                      <Text style={styles.summaryBadgeLabel}>
+                        📅 {isConfirmed ? '✅ CONFIRMED' : '⏳ AWAITING DOCTOR'}
+                      </Text>
+                    </View>
+                    <Text style={styles.summaryDoctorName}>
+                      {cleanDocName}
+                    </Text>
+                    <Text style={styles.summaryDateTime}>
+                      {slotDate} at {slotTime}
+                    </Text>
+                    <TouchableOpacity
+                      style={[styles.callScreenBtn, !isConfirmed && { backgroundColor: '#F59E0B' }]}
+                      onPress={() => {
+                        const slotStartTime = new Date(appt.slotStart).getTime();
+                        const currentTime = new Date().getTime();
+                        if (currentTime < slotStartTime - (5 * 60 * 1000)) {
+                          alert(`Scheduled for Later\n\nThis consultation is scheduled for ${slotDate} at ${slotTime}.\nYou can join the waiting room 5 minutes before the scheduled time.`);
+                        } else {
+                          navigation.navigate('VideoCall', {
+                            appointment: {
+                              id: appt.id,
+                              doctorName: cleanDocName,
+                              doctorSpecialization: appt.doctor?.specialization || 'Clinical Dermatology',
+                              date: slotDate,
+                              time: slotTime,
+                              meetRoomId: appt.roomId || `room_${appt.id}`,
+                            }
+                          });
+                        }
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.callScreenBtnText}>
+                        {isConfirmed ? 'Enter Call Screen 🎥' : 'Join Waiting Room 🚪'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })
+            ) : (
+              <View style={styles.summaryCard}>
+                <View style={styles.summaryHeaderRow}>
+                  <Text style={styles.summaryBadgeLabel}>✅ NO ACTIVE CALL</Text>
+                </View>
+                <Text style={styles.summaryDoctorName}>No Upcoming Consultations</Text>
+                <Text style={styles.summaryDateTime}>Active queue is clear</Text>
               </View>
-              <Text style={styles.summaryDoctorName}>
-                {upcomingInfo.doctorName}
-              </Text>
-              <Text style={styles.summaryDateTime}>
-                {upcomingInfo.timeString}
-              </Text>
-              {upcomingInfo.hasActive ? (
-                <TouchableOpacity
-                  style={[styles.callScreenBtn, !upcomingInfo.isConfirmed && { backgroundColor: '#F59E0B' }]}
-                  onPress={() => navigation.navigate('VideoCall', { appointment: upcomingInfo.data })}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.callScreenBtnText}>
-                    {upcomingInfo.isConfirmed ? 'Enter Call Screen 🎥' : 'Join Waiting Room ⏳'}
-                  </Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity
-                  style={[styles.callScreenBtn, { backgroundColor: '#0F967E' }]}
-                  onPress={() => navigation.navigate('MedicalRecords')}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.callScreenBtnText}>
-                    View Records & Rx ➔
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </View>
+            )}
 
             {/* Card 2: Follow-up Reminder */}
             <View style={styles.summaryCard}>
@@ -727,3 +719,4 @@ const styles = StyleSheet.create({
     color: Colors.textDark,
   },
 });
+
