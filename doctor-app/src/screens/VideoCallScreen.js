@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import api from '../services/api';
 import { socketService } from '../services/socketService';
@@ -28,7 +29,14 @@ const VideoCallScreen = ({ route, navigation }) => {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
   const [peerJoined, setPeerJoined] = useState(false);
+  const [patientEverJoined, setPatientEverJoined] = useState(false);
   const [isEndingCall, setIsEndingCall] = useState(false);
+  const hasPatientEverJoinedRef = useRef(false);
+
+  // Payment Verification States
+  const [pendingPaymentClaim, setPendingPaymentClaim] = useState(null);
+  const [isConfirmingPayment, setIsConfirmingPayment] = useState(false);
+  const [isPrescriptionSaved, setIsPrescriptionSaved] = useState(false);
 
   // Prescription States (Dynamic Array)
   const [medicines, setMedicines] = useState([
@@ -58,6 +66,8 @@ const VideoCallScreen = ({ route, navigation }) => {
         webrtc.initPeerConnection({
           onRemoteStream: (rStream) => {
             console.log('[DoctorApp] Remote Patient Stream Attached');
+            hasPatientEverJoinedRef.current = true;
+            setPatientEverJoined(true);
             setRemoteStream(rStream);
           },
           onIceCandidate: (candidate) => {
@@ -68,9 +78,19 @@ const VideoCallScreen = ({ route, navigation }) => {
         // 3. Join WebRTC Room
         socketService.joinWebRtcRoom(roomId, 'Doctor');
 
+        // Socket Event: Explicit Patient Joined Event (Ultra-Reliable Signaling)
+        const unsubPatientExplicit = socketService.on('consultation:patient-joined', (payload) => {
+          console.log('[DoctorApp] Explicit consultation:patient-joined received:', payload);
+          hasPatientEverJoinedRef.current = true;
+          setPatientEverJoined(true);
+          setPeerJoined(true);
+        });
+
         // Socket Event: Peer Joined (Patient entered room) -> Doctor creates offer
         const unsubPeerJoined = socketService.on('webrtc:peer-joined', async (peer) => {
           console.log('[DoctorApp] Patient joined room:', peer);
+          hasPatientEverJoinedRef.current = true;
+          setPatientEverJoined(true);
           setPeerJoined(true);
           try {
             const offer = await webrtc.createOffer();
@@ -85,6 +105,8 @@ const VideoCallScreen = ({ route, navigation }) => {
         // Socket Event: Offer received (if Patient initiated)
         const unsubOffer = socketService.on('webrtc:offer', async (payload) => {
           console.log('[DoctorApp] Received offer from Patient');
+          hasPatientEverJoinedRef.current = true;
+          setPatientEverJoined(true);
           setPeerJoined(true);
           try {
             const answer = await webrtc.handleOffer(payload.offer);
@@ -99,6 +121,8 @@ const VideoCallScreen = ({ route, navigation }) => {
         // Socket Event: Answer received from Patient
         const unsubAnswer = socketService.on('webrtc:answer', async (payload) => {
           console.log('[DoctorApp] Received answer from Patient');
+          hasPatientEverJoinedRef.current = true;
+          setPatientEverJoined(true);
           try {
             await webrtc.handleAnswer(payload.answer);
           } catch (e) {
@@ -136,13 +160,21 @@ const VideoCallScreen = ({ route, navigation }) => {
           }
         });
 
+        // Socket Event: Patient marked direct UPI payment as sent
+        const unsubPaymentClaimed = socketService.on('payment:claimed', (data) => {
+          console.log('[DoctorApp] Live payment:claimed received:', data);
+          setPendingPaymentClaim(data);
+        });
+
         return () => {
+          unsubPatientExplicit();
           unsubPeerJoined();
           unsubOffer();
           unsubAnswer();
           unsubCandidate();
           unsubPeerLeft();
           unsubEnded();
+          unsubPaymentClaimed();
         };
       } catch (err) {
         console.error('[DoctorApp] WebRTC startup error:', err);
@@ -182,14 +214,24 @@ const VideoCallScreen = ({ route, navigation }) => {
   const executeEndCall = async () => {
     try {
       setIsEndingCall(true);
-      // 1. Broadcast end-call over WebSocket to room
-      socketService.endCall(roomId);
 
-      // 2. Mark consultation / appointment as complete in database
-      if (consultationId) {
-        await api.post(`/consultations/${consultationId}/end`).catch(() => {});
-      } else if (patient?.id) {
-        await api.patch(`/appointments/${patient.id}/complete`).catch(() => {});
+      if (!hasPatientEverJoinedRef.current) {
+        // CASE 1: Patient NEVER joined.
+        // Doctor is simply exiting the waiting room without completing.
+        console.log('[DoctorApp] Patient never joined room. Leaving waiting room without completing.');
+        socketService.leaveWebRtcRoom(roomId);
+        if (consultationId) {
+          await api.post(`/consultations/${consultationId}/leave`).catch(() => {});
+        }
+      } else {
+        // CASE 2: Patient joined and consultation actually happened.
+        console.log('[DoctorApp] Patient attended consultation. Completing session officially.');
+        socketService.endCall(roomId);
+        if (consultationId) {
+          await api.post(`/consultations/${consultationId}/end`).catch(() => {});
+        } else if (patient?.id) {
+          await api.patch(`/appointments/${patient.id}/complete`).catch(() => {});
+        }
       }
     } catch (err) {
       console.log('End call notice:', err.message);
@@ -256,18 +298,44 @@ const VideoCallScreen = ({ route, navigation }) => {
         })),
       });
 
+      setIsPrescriptionSaved(true);
       Alert.alert(
-        'Prescription Saved & Sent! 📄✅',
-        `Successfully saved ${medicines.length} medicine(s) to ${patientName}'s record and pushed real-time notification to their app.`
+        'Prescription Saved & Sent! 📄🔒',
+        `Prescription saved! It is locked pending ${patientName}'s direct UPI payment. You will receive a verification prompt once they pay.`
       );
     } catch (err) {
       console.warn('Prescription save notice:', err.response?.data || err.message);
+      setIsPrescriptionSaved(true);
       Alert.alert(
         'Prescription Saved! ✅',
         `Saved ${medicines.length} medicine(s) to ${patientName}'s medical record.`
       );
     } finally {
       setIsSavingRx(false);
+    }
+  };
+
+  const handleConfirmPaymentReceived = async () => {
+    try {
+      setIsConfirmingPayment(true);
+      const apptId = pendingPaymentClaim?.appointmentId || patient?.backendData?.id || (patient?.id && !String(patient.id).startsWith('cst_') ? patient.id : undefined);
+      const cId = pendingPaymentClaim?.consultationId || consultationId;
+
+      await api.post('/payments/confirm-received', {
+        appointmentId: apptId,
+        consultationId: cId,
+      });
+
+      setPendingPaymentClaim(null);
+      Alert.alert(
+        'Payment Confirmed & Rx Released! ✅',
+        `Prescription has been unlocked and released to ${patientName}. Consultation marked as completed.`
+      );
+    } catch (err) {
+      console.warn('Confirm payment error:', err.message);
+      Alert.alert('Notice', err.response?.data?.message || 'Failed to confirm payment.');
+    } finally {
+      setIsConfirmingPayment(false);
     }
   };
 
@@ -338,7 +406,9 @@ const VideoCallScreen = ({ route, navigation }) => {
             {isEndingCall ? (
               <ActivityIndicator color="#fff" size="small" />
             ) : (
-              <Text style={styles.endCallText}>❌ End Call</Text>
+              <Text style={styles.endCallText}>
+                {patientEverJoined ? '❌ End Call' : '🚪 Leave Room'}
+              </Text>
             )}
           </TouchableOpacity>
         </View>
@@ -399,8 +469,77 @@ const VideoCallScreen = ({ route, navigation }) => {
               <Text style={styles.saveBtnText}>💾 Save & Send Rx to Patient App ➔</Text>
             )}
           </TouchableOpacity>
+
+          {isPrescriptionSaved && (
+            <View style={styles.rxLockedBadge}>
+              <Text style={styles.rxLockedBadgeTitle}>🔒 Prescription Issued (Locked)</Text>
+              <Text style={styles.rxLockedBadgeText}>
+                Prescription is locked on patient's device until direct UPI payment of consultation fee is verified.
+              </Text>
+            </View>
+          )}
         </ScrollView>
       </View>
+
+      {/* Patient UPI Payment Acknowledgment Modal */}
+      <Modal visible={!!pendingPaymentClaim} transparent animationType="slide">
+        <View style={styles.paymentModalOverlay}>
+          <View style={styles.paymentModalCard}>
+            <View style={styles.paymentModalHeader}>
+              <View style={styles.paymentIconBadge}>
+                <Text style={{ fontSize: 28 }}>💰</Text>
+              </View>
+              <Text style={styles.paymentModalTitle}>Payment Verification</Text>
+              <Text style={styles.paymentModalSub}>
+                Patient marked consultation fee as paid directly to your UPI ID
+              </Text>
+            </View>
+
+            <View style={styles.paymentDetailBox}>
+              <View style={styles.paymentDetailRow}>
+                <Text style={styles.paymentDetailLabel}>Patient</Text>
+                <Text style={styles.paymentDetailValue}>{pendingPaymentClaim?.patientName || patientName}</Text>
+              </View>
+              <View style={styles.paymentDetailRow}>
+                <Text style={styles.paymentDetailLabel}>Amount Transferred</Text>
+                <Text style={[styles.paymentDetailValue, { color: '#0F766E', fontSize: 18, fontWeight: '700' }]}>
+                  ₹{pendingPaymentClaim?.amount || '700'}
+                </Text>
+              </View>
+              <View style={styles.paymentDetailRow}>
+                <Text style={styles.paymentDetailLabel}>Payment Mode</Text>
+                <Text style={styles.paymentDetailValue}>Direct Bank UPI</Text>
+              </View>
+            </View>
+
+            <Text style={styles.paymentHelpNotice}>
+              ℹ️ Please check your UPI app (GPay / PhonePe / Paytm / Bank SMS) to verify receipt before releasing the prescription.
+            </Text>
+
+            <View style={styles.paymentBtnRow}>
+              <TouchableOpacity
+                style={styles.paymentRejectBtn}
+                onPress={() => setPendingPaymentClaim(null)}
+                disabled={isConfirmingPayment}
+              >
+                <Text style={styles.paymentRejectBtnText}>Check Later</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.paymentConfirmBtn}
+                onPress={handleConfirmPaymentReceived}
+                disabled={isConfirmingPayment}
+              >
+                {isConfirmingPayment ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={styles.paymentConfirmBtnText}>✓ Confirm & Release Rx</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 };
@@ -515,9 +654,142 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     marginTop: 10,
-    marginBottom: 30,
+    marginBottom: 16,
   },
   saveBtnText: { color: '#ffffff', fontSize: 15, fontWeight: 'bold' },
+
+  rxLockedBadge: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 30,
+  },
+  rxLockedBadgeTitle: {
+    color: '#92400E',
+    fontWeight: '700',
+    fontSize: 13,
+    marginBottom: 4,
+  },
+  rxLockedBadgeText: {
+    color: '#B45309',
+    fontSize: 12,
+    lineHeight: 17,
+  },
+
+  // Payment Modal Styles
+  paymentModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  paymentModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 440,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  paymentModalHeader: {
+    alignItems: 'center',
+    marginBottom: 18,
+  },
+  paymentIconBadge: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#ECFDF5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  paymentModalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0F172A',
+    textAlign: 'center',
+  },
+  paymentModalSub: {
+    fontSize: 13,
+    color: '#64748B',
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  paymentDetailBox: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  paymentDetailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  paymentDetailLabel: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  paymentDetailValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  paymentHelpNotice: {
+    fontSize: 12,
+    color: '#475569',
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+    lineHeight: 17,
+    marginBottom: 18,
+  },
+  paymentBtnRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  paymentRejectBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  paymentRejectBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  paymentConfirmBtn: {
+    flex: 1.6,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0F766E',
+  },
+  paymentConfirmBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
 });
 
 export default VideoCallScreen;

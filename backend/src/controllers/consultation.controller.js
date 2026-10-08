@@ -50,6 +50,15 @@ const joinConsultation = async (req, res, next) => {
       peer: sessionData.peerIdentity,
     });
 
+    if (req.user.role === "PATIENT") {
+      emitToRoom(sessionData.roomId, "consultation:patient-joined", {
+        consultationId: sessionData.consultationId,
+        roomId: sessionData.roomId,
+        patientId: req.user.patientId,
+        joinedAt: Date.now(),
+      });
+    }
+
     return sendSuccess(res, "Joined consultation session", sessionData);
   } catch (err) {
     return next(err);
@@ -87,9 +96,22 @@ const endConsultation = async (req, res, next) => {
   }
 };
 
+const leaveConsultation = async (req, res, next) => {
+  try {
+    const consultation = await consultationService.leaveConsultation(
+      req.params.consultationId,
+      req.user
+    );
+    return sendSuccess(res, "Left consultation session", consultation);
+  } catch (err) {
+    return next(err);
+  }
+};
+
 module.exports = {
   createConsultation,
   getConsultationById,
   joinConsultation,
   endConsultation,
+  leaveConsultation,
 };

@@ -1,6 +1,6 @@
-﻿import { registerRootComponent } from 'expo';
+import { registerRootComponent } from 'expo';
 import { LogBox } from 'react-native';
-import App from './App';
+import App from './app';
 
 LogBox.ignoreLogs([
   'SafeAreaView has been deprecated',

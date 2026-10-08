@@ -20,37 +20,54 @@ const createPrescription = async (req, res, next) => {
       doctorUser: req.user,
     });
 
-    // Real-Time Notification: Push new prescription directly to the patient in real time!
-    emitToPatient(prescription.patientId, "prescription:new", prescription);
-    emitToPatient(prescription.patientId, "consultation:completed", {
-      consultationId: prescription.consultationId,
-      appointmentId: prescription.consultation?.appointmentId,
-      status: "COMPLETED",
-    });
-    emitToPatient(prescription.patientId, "appointment:completed", {
-      appointmentId: prescription.consultation?.appointmentId,
-      status: "COMPLETED",
-    });
-
-    emitToDoctor(prescription.doctorId, "consultation:completed", {
-      consultationId: prescription.consultationId,
-      appointmentId: prescription.consultation?.appointmentId,
-      status: "COMPLETED",
-    });
-    emitToDoctor(prescription.doctorId, "appointment:completed", {
-      appointmentId: prescription.consultation?.appointmentId,
-      status: "COMPLETED",
-    });
-
-    if (prescription.patient?.user?.id) {
-      emitToUser(prescription.patient.user.id, "prescription:new", prescription);
-    }
-    if (prescription.consultation?.roomId) {
-      emitToRoom(prescription.consultation.roomId, "prescription:new", prescription);
-      emitToRoom(prescription.consultation.roomId, "consultation:ended", {
+    if (prescription.isUnlocked) {
+      // Free consultation or already unlocked
+      emitToPatient(prescription.patientId, "prescription:new", prescription);
+      emitToPatient(prescription.patientId, "consultation:completed", {
         consultationId: prescription.consultationId,
+        appointmentId: prescription.consultation?.appointmentId,
         status: "COMPLETED",
       });
+      emitToPatient(prescription.patientId, "appointment:completed", {
+        appointmentId: prescription.consultation?.appointmentId,
+        status: "COMPLETED",
+      });
+
+      emitToDoctor(prescription.doctorId, "consultation:completed", {
+        consultationId: prescription.consultationId,
+        appointmentId: prescription.consultation?.appointmentId,
+        status: "COMPLETED",
+      });
+      emitToDoctor(prescription.doctorId, "appointment:completed", {
+        appointmentId: prescription.consultation?.appointmentId,
+        status: "COMPLETED",
+      });
+
+      if (prescription.patient?.user?.id) {
+        emitToUser(prescription.patient.user.id, "prescription:new", prescription);
+      }
+      if (prescription.consultation?.roomId) {
+        emitToRoom(prescription.consultation.roomId, "prescription:new", prescription);
+        emitToRoom(prescription.consultation.roomId, "consultation:ended", {
+          consultationId: prescription.consultationId,
+          status: "COMPLETED",
+        });
+      }
+    } else {
+      // Prescription created but locked awaiting patient payment
+      const lockedPayload = {
+        consultationId: prescription.consultationId,
+        appointmentId: prescription.consultation?.appointmentId,
+        prescriptionId: prescription.id,
+        status: "LOCKED_AWAITING_PAYMENT",
+      };
+      emitToPatient(prescription.patientId, "prescription:locked", lockedPayload);
+      if (prescription.patient?.user?.id) {
+        emitToUser(prescription.patient.user.id, "prescription:locked", lockedPayload);
+      }
+      if (prescription.consultation?.roomId) {
+        emitToRoom(prescription.consultation.roomId, "prescription:locked", lockedPayload);
+      }
     }
 
     return sendSuccess(res, "Prescription created successfully", prescription, 201);

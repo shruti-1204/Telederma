@@ -56,6 +56,7 @@ export default function DoctorProfileSetupScreen({ navigation }) {
     doctor?.availableSlots || '09:00 AM - 01:00 PM, 04:00 PM - 08:00 PM'
   );
   const [languages, setLanguages] = useState(doctor?.languages || 'English, Hindi');
+  const [upiId, setUpiId] = useState(doctor?.upiId || '');
 
   useEffect(() => {
     if (doctor) {
@@ -103,6 +104,9 @@ export default function DoctorProfileSetupScreen({ navigation }) {
       }
       if (doctor.languages) {
         setLanguages(doctor.languages);
+      }
+      if (doctor.upiId) {
+        setUpiId(doctor.upiId);
       }
     }
   }, [doctor]);
@@ -180,6 +184,14 @@ export default function DoctorProfileSetupScreen({ navigation }) {
       setErrorMessage('Languages Spoken are required.');
       return;
     }
+    if (parseFloat(consultationFee) > 0 && !upiId.trim()) {
+      setErrorMessage('Doctor UPI ID is required so patients can pay consultation fees directly to you.');
+      return;
+    }
+    if (upiId.trim() && !upiId.includes('@')) {
+      setErrorMessage('Please enter a valid UPI ID containing "@" (e.g. name@oksbi or 9876543210@upi).');
+      return;
+    }
 
     setIsSubmitting(true);
 
@@ -199,6 +211,7 @@ export default function DoctorProfileSetupScreen({ navigation }) {
         consultationDuration: consultationDuration.trim(),
         availableSlots: availableSlots.trim(),
         languages: languages.trim(),
+        upiId: upiId.trim(),
       };
 
       await completeDoctorProfile(payload);
@@ -532,6 +545,27 @@ export default function DoctorProfileSetupScreen({ navigation }) {
                 placeholder="e.g. English, Hindi, Marathi"
                 placeholderTextColor="#9CA3AF"
               />
+            </View>
+
+            {/* Direct Consultation Payment UPI ID */}
+            <View style={styles.fieldItem}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <Text style={styles.fieldLabel}>Doctor UPI ID (Direct Patient Payments) *</Text>
+                <View style={{ backgroundColor: '#ECFDF5', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                  <Text style={{ fontSize: 11, color: '#047857', fontWeight: '600' }}>🔒 2-Way Encrypted</Text>
+                </View>
+              </View>
+              <TextInput
+                style={styles.fieldInput}
+                value={upiId}
+                onChangeText={setUpiId}
+                placeholder="e.g. dr.kundan@oksbi or 9876543210@upi"
+                placeholderTextColor="#9CA3AF"
+                autoCapitalize="none"
+              />
+              <Text style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>
+                Patients transfer consultation fees directly to your UPI ID without middleman deduction. Your UPI ID is encrypted with AES-256 in the database.
+              </Text>
             </View>
           </View>
         </View>

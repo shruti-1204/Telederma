@@ -9,8 +9,10 @@ import {
   SafeAreaView,
   ActivityIndicator,
   Modal,
+  Alert,
 } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import DateTimePicker from '../utils/DatePickerCompat';
 import { Colors } from '../theme/colors';
 import Header from '../components/Header';
 import { mockDoctors } from '../services/mockData';
@@ -18,6 +20,29 @@ import { ConsultationContext } from '../context/ConsultationContext';
 import api from '../services/api';
 import { socketService } from '../services/socketService';
 import { parseDoctorSlots } from '../utils/slotHelper';
+
+const parseTimeToHoursMinutes = (timeStr) => {
+  if (!timeStr) return { hours: 10, minutes: 0 };
+  const str = String(timeStr).trim().toUpperCase();
+  const match = str.match(/(\d{1,2})[:.](\d{2})\s*(AM|PM)?/);
+  if (match) {
+    let hours = parseInt(match[1], 10);
+    const minutes = parseInt(match[2], 10);
+    const modifier = match[3];
+    if (modifier === 'PM' && hours < 12) hours += 12;
+    if (modifier === 'AM' && hours === 12) hours = 0;
+    return { hours, minutes };
+  }
+  const singleMatch = str.match(/(\d{1,2})\s*(AM|PM)/);
+  if (singleMatch) {
+    let hours = parseInt(singleMatch[1], 10);
+    const modifier = singleMatch[2];
+    if (modifier === 'PM' && hours < 12) hours += 12;
+    if (modifier === 'AM' && hours === 12) hours = 0;
+    return { hours, minutes: 0 };
+  }
+  return { hours: 10, minutes: 0 };
+};
 
 const generateDates = () => {
   const dates = [];
@@ -90,7 +115,8 @@ export default function BookAppointmentScreen({ navigation, route }) {
           try {
             const docsRes = await api.get('/doctors');
             if (docsRes.data?.data && docsRes.data.data.length > 0) {
-              fetchId = docsRes.data.data[0].id;
+              const verifiedDoc = docsRes.data.data.find((d) => d.isVerified) || docsRes.data.data[0];
+              fetchId = verifiedDoc.id;
             }
           } catch(e) {}
         }
@@ -99,15 +125,18 @@ export default function BookAppointmentScreen({ navigation, route }) {
         const res = await api.get(`/doctors/${fetchId}`);
         if (res.data?.data) {
           const liveDoc = res.data.data;
-          if (liveDoc.availableSlots) {
-            const freshSlots = parseDoctorSlots(liveDoc.availableSlots);
-            setDoctor((prev) => ({
-              ...prev,
-              ...liveDoc,
-              availableSlots: liveDoc.availableSlots,
-              slots: freshSlots,
-            }));
-          }
+          const freshSlots = parseDoctorSlots(liveDoc.availableSlots);
+          const cleanName = liveDoc.user?.name || liveDoc.name || incomingDoctor?.name;
+          const displayName = cleanName?.startsWith('Dr.') ? cleanName : `Dr. ${cleanName}`;
+          setDoctor((prev) => ({
+            ...prev,
+            ...liveDoc,
+            id: liveDoc.id,
+            name: displayName,
+            fee: liveDoc.consultationFee != null ? Number(liveDoc.consultationFee) : (prev.fee || 700),
+            availableSlots: liveDoc.availableSlots,
+            slots: freshSlots,
+          }));
         }
       } catch (e) {
         console.warn('[BookAppointment] Live slots fetch notice:', e.message);
@@ -167,67 +196,73 @@ export default function BookAppointmentScreen({ navigation, route }) {
   const handlePayNow = async () => {
     setIsProcessingPayment(true);
     try {
-      // 1. Calculate appointment slot date range
-      const baseDate = selectedDate.fullDate || '2026-10-04';
-      const timeStr = selectedSlot?.time || '10:00 AM';
-      const [timePart, modifier] = timeStr.split(' ');
-      let [hours, minutes] = (timePart || '10:00').split(':').map(Number);
-      if (modifier === 'PM' && hours < 12) hours += 12;
-      if (modifier === 'AM' && hours === 12) hours = 0;
-
-      const dateParts = baseDate.split('-').map(Number);
-      const start = new Date(dateParts[0], dateParts[1] - 1, dateParts[2], hours, minutes, 0);
-
-      // Ensure valid patient auth token is active
-      try {
-        const authRes = await api.post('/auth/verify-otp', {
-          phone: '9876543210',
-          otp: '123456',
-          role: 'PATIENT',
-        });
-        if (authRes.data?.data?.accessToken) {
-          api.defaults.headers.common['Authorization'] = `Bearer ${authRes.data.data.accessToken}`;
-        }
-      } catch (authErr) {
-        // Interceptor will handle if token already exists
+      // 1. Verify patient authentication token
+      const token = await AsyncStorage.getItem('@telederma_auth_token');
+      if (!token) {
+        setShowPaymentModal(false);
+        setIsProcessingPayment(false);
+        alert('Please log in first to book an appointment.');
+        navigation.navigate('Login');
+        return;
       }
 
-      // 2. Resolve Doctor Database ID
-      let targetDoctorId = doctor.id;
+      // 2. Calculate appointment slot date range safely without invalid date errors
+      const baseDate = selectedDate?.fullDate || new Date().toISOString().split('T')[0];
+      const { hours, minutes } = parseTimeToHoursMinutes(selectedSlot?.time);
+      const [year, month, day] = baseDate.split('-').map(Number);
+      const slotStart = new Date(year, month - 1, day, hours, minutes, 0);
+      const slotEnd = new Date(slotStart.getTime() + 30 * 60 * 1000);
+
+      // 3. Resolve Doctor Database ID (must be a valid Neon PostgreSQL ID)
+      let targetDoctorId = doctor?.id || incomingDoctor?.id;
       if (!targetDoctorId || targetDoctorId.length < 10) {
         try {
           const docsRes = await api.get('/doctors');
           if (docsRes.data?.data && docsRes.data.data.length > 0) {
-            targetDoctorId = docsRes.data.data[0].id;
+            const verifiedDoc = docsRes.data.data.find((d) => d.isVerified) || docsRes.data.data[0];
+            targetDoctorId = verifiedDoc.id;
           }
         } catch (e) {
-          targetDoctorId = 'cmuu0x6e40007xkwqqq3y41iz'; // Dr. Kundan Ashok Kharde default
+          console.warn('[BookAppointment] Could not resolve doctor ID:', e.message);
         }
       }
 
-      // 3. Post to Backend REST API with collision-free slot retry
+      if (!targetDoctorId || targetDoctorId.length < 10) {
+        setShowPaymentModal(false);
+        setIsProcessingPayment(false);
+        alert('Unable to identify doctor. Please select a doctor from the doctor list.');
+        return;
+      }
+
+      // 4. Post to Backend REST API
       let apptData = null;
       try {
-        const tryStart = new Date(start.getTime());
-        const tryEnd = new Date(tryStart.getTime() + 30 * 60 * 1000);
         const res = await api.post('/appointments', {
           doctorId: targetDoctorId,
-          slotStart: tryStart.toISOString(),
-          slotEnd: tryEnd.toISOString(),
+          slotStart: slotStart.toISOString(),
+          slotEnd: slotEnd.toISOString(),
         });
         apptData = res.data?.data;
         if (apptData) {
           console.log('[PatientApp] Live appointment booked in DB:', apptData.id);
         }
       } catch (postErr) {
-        if (postErr.response?.status === 409) {
-          alert('This slot is already booked. Please select a different time.');
-          setIsProcessingPayment(false);
-          return;
+        setShowPaymentModal(false);
+        setIsProcessingPayment(false);
+        const status = postErr.response?.status;
+        const msg = postErr.response?.data?.message || postErr.message || 'Failed to book slot';
+        console.error('[PatientApp] Booking post error:', postErr.response?.data || postErr.message);
+
+        if (status === 409) {
+          alert(msg || 'This slot is already booked. Please choose a different date or time slot.');
+        } else if (status === 401) {
+          alert('Session expired. Please log in again.');
+          navigation.navigate('Login');
         } else {
-          console.warn('Booking post error:', postErr.response?.data || postErr.message);
-          }
+          alert(`Booking failed: ${msg}`);
         }
+        return;
+      }
 
       if (apptData) {
         setBookedAppointment(apptData);
@@ -235,14 +270,13 @@ export default function BookAppointmentScreen({ navigation, route }) {
         if (apptData.status === 'CONFIRMED') {
           setIsDoctorConfirmed(true);
         }
+        setPaymentSuccess(true);
+        setBookingConfirmed(true);
       }
-
-      setPaymentSuccess(true);
-      setBookingConfirmed(true);
     } catch (err) {
-      console.error('Payment/booking error:', err);
-      setPaymentSuccess(true);
-      setBookingConfirmed(true);
+      console.error('Payment/booking unexpected error:', err);
+      setShowPaymentModal(false);
+      alert('An unexpected error occurred while booking. Please try again.');
     } finally {
       setIsProcessingPayment(false);
     }
@@ -257,13 +291,13 @@ export default function BookAppointmentScreen({ navigation, route }) {
         <View style={styles.doctorHeaderCard}>
           <View style={styles.docAvatar}>
             <Text style={styles.docAvatarText}>
-              {doctor.name.split(' ').map((w) => w[0]).join('')}
+              {(doctor?.name || 'Dr').split(' ').filter(Boolean).map((w) => w[0]).join('')}
             </Text>
           </View>
           <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={styles.docName}>{doctor.name}</Text>
-            <Text style={styles.docSpec}>{doctor.specialization}</Text>
-            <Text style={styles.docFee}>Consultation Fee: ₹{doctor.fee}</Text>
+            <Text style={styles.docName}>{doctor?.name || 'Dr. Specialist'}</Text>
+            <Text style={styles.docSpec}>{doctor?.specialization || 'Clinical Dermatology'}</Text>
+            <Text style={styles.docFee}>Consultation Fee: ₹{doctor?.fee != null ? doctor.fee : 700}</Text>
           </View>
         </View>
 
@@ -346,16 +380,18 @@ export default function BookAppointmentScreen({ navigation, route }) {
             </Text>
           </View>
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Doctor Fee</Text>
+            <Text style={styles.summaryLabel}>Doctor Consultation Fee</Text>
             <Text style={styles.summaryValue}>₹{doctor.fee}</Text>
           </View>
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Platform Convenience Fee</Text>
-            <Text style={[styles.summaryValue, { color: Colors.success }]}>FREE (₹0)</Text>
+            <Text style={styles.summaryLabel}>Payment Policy</Text>
+            <Text style={[styles.summaryValue, { color: '#0F766E', fontWeight: '700' }]}>
+              Pay via UPI After Video Call
+            </Text>
           </View>
           <View style={[styles.summaryRow, styles.totalRow]}>
-            <Text style={styles.totalLabel}>Total Payable</Text>
-            <Text style={styles.totalAmount}>₹{doctor.fee}</Text>
+            <Text style={styles.totalLabel}>Payable Now (Upfront)</Text>
+            <Text style={[styles.totalAmount, { color: Colors.success }]}>₹0 (Free Booking)</Text>
           </View>
         </View>
 
@@ -427,7 +463,7 @@ export default function BookAppointmentScreen({ navigation, route }) {
                   </Text>
                   <Text style={styles.confirmedDetail}>⏰ Time: {selectedSlot?.time}</Text>
                   <Text style={styles.confirmedDetail}>👨‍⚕️ Doctor: {doctor.name}</Text>
-                  <Text style={styles.confirmedDetail}>💳 Amount Paid: ₹{doctor.fee}</Text>
+                  <Text style={styles.confirmedDetail}>💵 Consultation Fee: ₹{doctor.fee} (Payable via UPI after consultation)</Text>
                   <Text style={styles.confirmedDetail}>🔗 WebRTC Room: {meetRoomId}</Text>
                 </View>
 

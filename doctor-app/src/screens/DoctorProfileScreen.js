@@ -49,6 +49,7 @@ export default function DoctorProfileScreen({ navigation }) {
   const [consultationDuration, setConsultationDuration] = useState('20 mins');
   const [availableSlots, setAvailableSlots] = useState('');
   const [languages, setLanguages] = useState('');
+  const [upiId, setUpiId] = useState('');
 
   useEffect(() => {
     fetchProfile();
@@ -89,6 +90,7 @@ export default function DoctorProfileScreen({ navigation }) {
         if (doc.consultationDuration) setConsultationDuration(doc.consultationDuration);
         if (doc.availableSlots) setAvailableSlots(doc.availableSlots);
         if (doc.languages) setLanguages(doc.languages);
+        if (doc.upiId) setUpiId(doc.upiId);
 
         // Cache doctor profile in AsyncStorage
         await AsyncStorage.setItem('doctor_profile_cache', JSON.stringify({
@@ -116,6 +118,7 @@ export default function DoctorProfileScreen({ navigation }) {
           if (doc.expertiseAreas) setExpertiseAreas(doc.expertiseAreas);
           if (doc.consultationFee) setConsultationFee(String(doc.consultationFee));
           if (doc.languages) setLanguages(doc.languages);
+          if (doc.upiId) setUpiId(doc.upiId);
         }
       } catch (e) {}
     } finally {
@@ -170,6 +173,7 @@ export default function DoctorProfileScreen({ navigation }) {
         consultationDuration: consultationDuration.trim(),
         availableSlots: availableSlots.trim(),
         languages: languages.trim(),
+        upiId: upiId.trim(),
       };
 
       const res = await api.put('/doctors/me', payload);
@@ -576,6 +580,40 @@ export default function DoctorProfileScreen({ navigation }) {
                 />
               ) : (
                 <Text style={styles.fieldDisplayVal}>{languages || 'English, Hindi'}</Text>
+              )}
+            </View>
+
+            {/* Direct Consultation Payment UPI ID */}
+            <View style={styles.fieldItem}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                <Text style={styles.fieldLabel}>Doctor UPI ID (Direct Patient Payments)</Text>
+                <View style={{ backgroundColor: '#ECFDF5', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                  <Text style={{ fontSize: 11, color: '#047857', fontWeight: '600' }}>🔒 2-Way AES Encrypted</Text>
+                </View>
+              </View>
+              {isEditing ? (
+                <View>
+                  <TextInput
+                    style={styles.fieldInput}
+                    value={upiId}
+                    onChangeText={setUpiId}
+                    placeholder="e.g. dr.kundan@oksbi or 9876543210@upi"
+                    placeholderTextColor="#9CA3AF"
+                    autoCapitalize="none"
+                  />
+                  <Text style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>
+                    Stored with two-way AES-256-CBC encryption. Patients pay directly to this UPI ID upon video call completion.
+                  </Text>
+                </View>
+              ) : (
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F9FAFB', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB' }}>
+                  <Text style={{ fontSize: 15, fontWeight: '600', color: '#1F2937', flex: 1 }}>
+                    {upiId || 'Not configured'}
+                  </Text>
+                  {upiId ? (
+                    <Text style={{ fontSize: 12, color: '#0F766E', fontWeight: '600' }}>✓ Active</Text>
+                  ) : null}
+                </View>
               )}
             </View>
           </View>

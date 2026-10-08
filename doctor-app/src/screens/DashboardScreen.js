@@ -28,6 +28,8 @@ export default function DashboardScreen({ navigation }) {
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [pendingPaymentClaim, setPendingPaymentClaim] = useState(null);
+  const [isConfirmingPayment, setIsConfirmingPayment] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [showRevenueModal, setShowRevenueModal] = useState(false);
 
@@ -115,6 +117,12 @@ export default function DashboardScreen({ navigation }) {
       );
     });
 
+    // Real-Time Notification: Patient marked direct UPI payment as sent
+    const unsubPaymentClaimed = socketService.on('payment:claimed', (data) => {
+      console.log('[Doctor App] Live payment:claimed received on dashboard:', data);
+      setPendingPaymentClaim(data);
+    });
+
     return () => {
       unsubFocus();
       unsubNew();
@@ -122,6 +130,7 @@ export default function DashboardScreen({ navigation }) {
       unsubApptCompleted();
       unsubConsultCompleted();
       unsubRxNew();
+      unsubPaymentClaimed();
     };
   }, [navigation]);
 
@@ -235,6 +244,23 @@ export default function DashboardScreen({ navigation }) {
       c.backendData?.status === 'COMPLETED' ||
       c.backendData?.consultation?.status === 'COMPLETED'
     );
+  };
+
+  const handleConfirmDashboardPayment = async () => {
+    try {
+      setIsConfirmingPayment(true);
+      await api.post('/payments/confirm-received', {
+        appointmentId: pendingPaymentClaim?.appointmentId,
+        consultationId: pendingPaymentClaim?.consultationId,
+      });
+      setPendingPaymentClaim(null);
+      fetchData();
+      alert('✓ Direct UPI Payment Confirmed! Prescription has been released to the patient.');
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to confirm payment.');
+    } finally {
+      setIsConfirmingPayment(false);
+    }
   };
 
   const activeCases = patients.filter((p) => !isCaseCompleted(p) && p.status !== 'CANCELLED');
@@ -761,6 +787,66 @@ export default function DashboardScreen({ navigation }) {
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
+      </Modal>
+
+      {/* Real-Time Patient Direct UPI Payment Notification Modal */}
+      <Modal visible={!!pendingPaymentClaim} transparent animationType="slide">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ backgroundColor: '#FFFFFF', borderRadius: 20, padding: 24, width: '100%', maxWidth: 440, elevation: 10 }}>
+            <View style={{ alignItems: 'center', marginBottom: 16 }}>
+              <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: '#ECFDF5', justifyContent: 'center', alignItems: 'center', marginBottom: 10 }}>
+                <Text style={{ fontSize: 28 }}>💰</Text>
+              </View>
+              <Text style={{ fontSize: 20, fontWeight: '800', color: '#0F172A', textAlign: 'center' }}>
+                Payment Received Verification
+              </Text>
+              <Text style={{ fontSize: 13, color: '#64748B', textAlign: 'center', marginTop: 4 }}>
+                Patient marked consultation fee as paid directly to your UPI ID
+              </Text>
+            </View>
+
+            <View style={{ backgroundColor: '#F8FAFC', borderRadius: 12, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#E2E8F0' }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                <Text style={{ fontSize: 13, color: '#64748B', fontWeight: '500' }}>Patient</Text>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#1E293B' }}>{pendingPaymentClaim?.patientName || 'Patient'}</Text>
+              </View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                <Text style={{ fontSize: 13, color: '#64748B', fontWeight: '500' }}>Amount Paid</Text>
+                <Text style={{ fontSize: 18, fontWeight: '800', color: '#0F766E' }}>₹{pendingPaymentClaim?.amount || '700'}</Text>
+              </View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ fontSize: 13, color: '#64748B', fontWeight: '500' }}>Mode</Text>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: '#334155' }}>Direct Peer-to-Peer UPI</Text>
+              </View>
+            </View>
+
+            <Text style={{ fontSize: 12, color: '#475569', backgroundColor: '#EFF6FF', borderColor: '#BFDBFE', borderWidth: 1, borderRadius: 8, padding: 10, lineHeight: 17, marginBottom: 18 }}>
+              ℹ️ Please check your UPI app or bank balance to verify the money was received before unlocking the prescription.
+            </Text>
+
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <TouchableOpacity
+                style={{ flex: 1, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: '#CBD5E1', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF' }}
+                onPress={() => setPendingPaymentClaim(null)}
+                disabled={isConfirmingPayment}
+              >
+                <Text style={{ fontSize: 14, fontWeight: '600', color: '#64748B' }}>Check Later</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={{ flex: 1.6, paddingVertical: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0F766E' }}
+                onPress={handleConfirmDashboardPayment}
+                disabled={isConfirmingPayment}
+              >
+                {isConfirmingPayment ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#FFFFFF' }}>✓ Confirm & Unlock Rx</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
     </ScrollView>
   );

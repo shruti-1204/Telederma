@@ -179,11 +179,45 @@ const handleClientMessage = (ws, message) => {
         ws
       );
 
+      // If the joining peer is a PATIENT, emit explicit consultation:patient-joined to room
+      if (info.role === "PATIENT" || payload?.role === "PATIENT") {
+        emitToRoom(
+          roomId,
+          "consultation:patient-joined",
+          {
+            roomId,
+            patientId: info.patientId || info.userId,
+            name: payload?.name || "Patient",
+            joinedAt: Date.now(),
+          },
+          ws
+        );
+      }
+
       // Confirm join to caller
       sendToSocket(ws, {
         type: "webrtc:joined",
         payload: { roomId, userId: info.userId, role: info.role },
       });
+      break;
+    }
+
+    // Explicit Consultation Patient Joined Relay
+    case "consultation:patient-joined": {
+      const roomId = payload?.roomId;
+      if (roomId) {
+        emitToRoom(
+          roomId,
+          "consultation:patient-joined",
+          {
+            roomId,
+            patientId: payload?.patientId || info.patientId || info.userId,
+            name: payload?.name || "Patient",
+            joinedAt: Date.now(),
+          },
+          ws
+        );
+      }
       break;
     }
 
@@ -269,6 +303,30 @@ const handleClientMessage = (ws, message) => {
           endedBy: info.userId,
           role: info.role,
         });
+      }
+      break;
+    }
+
+    // Payment Claimed by Patient (Direct UPI)
+    case "payment:claimed": {
+      const { doctorId, roomId } = payload || {};
+      if (doctorId) {
+        emitToDoctor(doctorId, "payment:claimed", payload);
+      }
+      if (roomId) {
+        emitToRoom(roomId, "payment:claimed", payload, ws);
+      }
+      break;
+    }
+
+    // Payment Confirmed by Doctor (Direct UPI Receipt & Rx Unlock)
+    case "payment:confirmed": {
+      const { patientId, roomId } = payload || {};
+      if (patientId) {
+        emitToPatient(patientId, "payment:confirmed", payload);
+      }
+      if (roomId) {
+        emitToRoom(roomId, "payment:confirmed", payload, ws);
       }
       break;
     }

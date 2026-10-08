@@ -122,6 +122,7 @@ model Doctor {
   consultationDuration String?
   languages            String?
   availableSlots       String?
+  upiId                String?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
@@ -249,6 +250,7 @@ model Prescription {
   patientId      String
   doctorId       String
   notes          String?
+  isUnlocked     Boolean  @default(true)
   createdAt      DateTime @default(now())
 
   consultation Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)

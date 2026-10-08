@@ -36,4 +36,11 @@ router.post(
   consultationController.endConsultation
 );
 
+router.post(
+  "/:consultationId/leave",
+  requireAuth,
+  validate(consultationIdParamSchema),
+  consultationController.leaveConsultation
+);
+
 module.exports = router;

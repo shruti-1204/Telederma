@@ -1,4 +1,4 @@
-﻿import React, { useContext, useState, useEffect } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,12 +9,15 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  Image,
+  Linking,
 } from 'react-native';
 import { Colors } from '../theme/colors';
 import Header from '../components/Header';
 import MedicalDisclaimer from '../components/MedicalDisclaimer';
 import { mockPrescriptions } from '../services/mockData';
 import { AuthContext } from '../context/AuthContext';
+import { socketService } from '../services/socketService';
 import api from '../services/api';
 
 export default function PrescriptionScreen({ navigation, route }) {
@@ -30,6 +33,13 @@ export default function PrescriptionScreen({ navigation, route }) {
   const [loading, setLoading] = useState(false);
   const [showPostPaymentOptions, setShowPostPaymentOptions] = useState(false);
   const [shouldPrint, setShouldPrint] = useState(false);
+
+  // Direct UPI Payment States
+  const [paymentDetails, setPaymentDetails] = useState(null);
+  const [loadingPaymentDetails, setLoadingPaymentDetails] = useState(false);
+  const [isPaymentClaimed, setIsPaymentClaimed] = useState(false);
+  const [isSubmittingClaim, setIsSubmittingClaim] = useState(false);
+  const [copiedUpi, setCopiedUpi] = useState(false);
 
   useEffect(() => {
     const fetchPrescription = async () => {
@@ -67,29 +77,181 @@ export default function PrescriptionScreen({ navigation, route }) {
     }
   }, [shouldPrint, showPostPaymentOptions, loading]);
 
-  const isPaid = rawRx?.consultation?.appointment?.paymentStatus === 'COMPLETED' || route?.params?.isPaid === true || false;
+  const isPaid =
+    rawRx?.isUnlocked === true ||
+    rawRx?.consultation?.appointment?.paymentStatus === 'COMPLETED' ||
+    route?.params?.isPaid === true ||
+    false;
 
-  const handlePayForPrescription = () => {
-    setRawRx({ ...rawRx, consultation: { ...rawRx.consultation, appointment: { ...rawRx.consultation?.appointment, paymentStatus: 'COMPLETED' } } });
-    setShowPostPaymentOptions(true);
+  useEffect(() => {
+    const apptId = route?.params?.appointment?.id || rawRx?.consultation?.appointmentId || rawRx?.appointmentId;
+    if (apptId && !isPaid) {
+      fetchPaymentDetails(apptId);
+    }
+  }, [route?.params?.appointment?.id, rawRx?.id, isPaid]);
+
+  const fetchPaymentDetails = async (targetId) => {
+    try {
+      setLoadingPaymentDetails(true);
+      const res = await api.get(`/payments/doctor-upi/${targetId}`);
+      if (res.data?.data) {
+        setPaymentDetails(res.data.data);
+        if (res.data.data.isUnlocked) {
+          setRawRx((prev) => ({ ...prev, isUnlocked: true }));
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load doctor payment details:', e.message);
+    } finally {
+      setLoadingPaymentDetails(false);
+    }
+  };
+
+  useEffect(() => {
+    const unsubConfirmed = socketService.on('payment:confirmed', () => {
+      setRawRx((prev) => ({ ...prev, isUnlocked: true }));
+      setIsPaymentClaimed(false);
+    });
+    const unsubUnlocked = socketService.on('prescription:unlocked', (unlockedData) => {
+      setRawRx(unlockedData);
+      setIsPaymentClaimed(false);
+    });
+    return () => {
+      unsubConfirmed();
+      unsubUnlocked();
+    };
+  }, []);
+
+  const handleCopyUpi = () => {
+    const upi = paymentDetails?.upiId || 'dr.kundan@upi';
+    if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(upi);
+    }
+    setCopiedUpi(true);
+    setTimeout(() => setCopiedUpi(false), 2500);
+  };
+
+  const handleOpenUpiApp = async () => {
+    const upiUrl = paymentDetails?.upiPayString;
+    if (!upiUrl) return;
+    try {
+      await Linking.openURL(upiUrl);
+    } catch (err) {
+      Alert.alert('Open UPI App', `Please transfer ₹${paymentDetails?.consultationFee || 700} to ${paymentDetails?.upiId || 'doctor@upi'}.`);
+    }
+  };
+
+  const handleClaimPayment = async () => {
+    try {
+      setIsSubmittingClaim(true);
+      const apptId = route?.params?.appointment?.id || rawRx?.consultation?.appointmentId || rawRx?.appointmentId || paymentDetails?.appointmentId;
+      const cId = rawRx?.consultationId || paymentDetails?.consultationId;
+
+      await api.post('/payments/claim-paid', {
+        appointmentId: apptId,
+        consultationId: cId,
+        amount: paymentDetails?.consultationFee || 700,
+      });
+
+      setIsPaymentClaimed(true);
+      Alert.alert(
+        'Payment Claim Sent! 🔔',
+        `Doctor has been notified in real time. Once verified, this prescription will unlock immediately.`
+      );
+    } catch (err) {
+      Alert.alert('Notice', err.response?.data?.message || 'Failed to submit payment claim.');
+    } finally {
+      setIsSubmittingClaim(false);
+    }
   };
 
   if (!loading && rawRx && !isPaid) {
+    const docName =
+      paymentDetails?.doctorName ||
+      rawRx?.doctorName ||
+      (rawRx?.doctor?.user?.name
+        ? (rawRx.doctor.user.name.startsWith('Dr.') ? rawRx.doctor.user.name : `Dr. ${rawRx.doctor.user.name}`)
+        : 'Doctor');
+    const fee = paymentDetails?.consultationFee || 700;
+    const upi = paymentDetails?.upiId || 'dr.kundan@upi';
+    const upiString = paymentDetails?.upiPayString || `upi://pay?pa=${encodeURIComponent(upi)}&pn=${encodeURIComponent(docName)}&am=${fee.toFixed(2)}&cu=INR&tn=TeleDerma%20Consultation%20Fee`;
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(upiString)}`;
+
     return (
       <SafeAreaView style={styles.safeArea}>
         <Header title="e-Prescription Locked" onBack={() => navigation.goBack()} />
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-          <Text style={{ fontSize: 24, fontWeight: 'bold', color: Colors.primary, marginBottom: 15 }}>Payment Required 🔒</Text>
-          <Text style={{ textAlign: 'center', color: Colors.text, marginBottom: 30, fontSize: 16 }}>
-            Your consultation is complete. Please pay the consultation fee to view and download your digital prescription.
+        <ScrollView contentContainerStyle={{ padding: 20, alignItems: 'center' }} showsVerticalScrollIndicator={false}>
+          <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: '#FEF3C7', justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
+            <Text style={{ fontSize: 30 }}>🔒</Text>
+          </View>
+          <Text style={{ fontSize: 22, fontWeight: '800', color: '#1E293B', marginBottom: 6, textAlign: 'center' }}>
+            Payment Required to Unlock Rx
           </Text>
-          <TouchableOpacity 
-            style={{ backgroundColor: Colors.primary, padding: 18, borderRadius: 12, width: '100%', alignItems: 'center', elevation: 3 }}
-            onPress={handlePayForPrescription}
-          >
-            <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>Pay Now to Unlock</Text>
-          </TouchableOpacity>
-        </View>
+          <Text style={{ textAlign: 'center', color: '#64748B', marginBottom: 20, fontSize: 13, lineHeight: 18 }}>
+            Please complete direct UPI payment to {docName} to view and download your full prescription.
+          </Text>
+
+          {/* Details Card */}
+          <View style={{ width: '100%', maxWidth: 440, backgroundColor: '#FFFFFF', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: '#E2E8F0', elevation: 2, marginBottom: 16 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 }}>
+              <Text style={{ fontSize: 13, color: '#64748B' }}>👨‍⚕️ Doctor</Text>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: '#1E293B' }}>{docName}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }}>
+              <Text style={{ fontSize: 13, color: '#64748B' }}>💵 Consultation Fee</Text>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: '#0F766E' }}>₹{fee}</Text>
+            </View>
+
+            {/* UPI ID */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F0FDFA', borderWidth: 1, borderColor: '#CCFBF1', borderRadius: 10, padding: 12, marginTop: 12, marginBottom: 16 }}>
+              <View style={{ flex: 1, marginRight: 8 }}>
+                <Text style={{ fontSize: 11, color: '#0F766E', fontWeight: '600' }}>🆔 Doctor UPI ID</Text>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#134E4A' }}>{upi}</Text>
+              </View>
+              <TouchableOpacity onPress={handleCopyUpi} style={{ backgroundColor: '#0F766E', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 }}>
+                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{copiedUpi ? '✓ Copied' : '📋 Copy'}</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* QR Code */}
+            <View style={{ alignItems: 'center', padding: 12, backgroundColor: '#F8FAFC', borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 16 }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1E293B', marginBottom: 4 }}>📲 Auto-Generated UPI QR Code</Text>
+              <Text style={{ fontSize: 11, color: '#64748B', marginBottom: 10 }}>Scan with GPay, PhonePe, Paytm, or BHIM</Text>
+              <Image source={{ uri: qrUrl }} style={{ width: 180, height: 180, borderRadius: 8 }} resizeMode="contain" />
+            </View>
+
+            {/* Open UPI App */}
+            <TouchableOpacity
+              onPress={handleOpenUpiApp}
+              style={{ backgroundColor: '#0F766E', padding: 14, borderRadius: 12, width: '100%', alignItems: 'center', marginBottom: 10 }}
+            >
+              <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>🚀 Open GPay / PhonePe / UPI App</Text>
+            </TouchableOpacity>
+
+            {/* Claim Paid */}
+            {isPaymentClaimed ? (
+              <View style={{ backgroundColor: '#EFF6FF', borderColor: '#BFDBFE', borderWidth: 1, padding: 12, borderRadius: 10, alignItems: 'center' }}>
+                <ActivityIndicator size="small" color="#0F766E" style={{ marginBottom: 6 }} />
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#1E40AF' }}>Payment Claim Sent! ⏳</Text>
+                <Text style={{ fontSize: 11, color: '#3B82F6', textAlign: 'center' }}>
+                  Waiting for doctor to confirm receipt in real time. This page will unlock automatically.
+                </Text>
+              </View>
+            ) : (
+              <TouchableOpacity
+                onPress={handleClaimPayment}
+                disabled={isSubmittingClaim}
+                style={{ backgroundColor: '#10B981', padding: 14, borderRadius: 12, width: '100%', alignItems: 'center' }}
+              >
+                {isSubmittingClaim ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>✅ I Have Completed Payment (₹{fee})</Text>
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }

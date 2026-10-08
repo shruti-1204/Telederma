@@ -3,6 +3,7 @@ const env = require("../config/env");
 const prisma = require("../config/prisma");
 const { NotFoundError, BadRequestError, ForbiddenError } = require("../utils/errors");
 const { createAuditLog } = require("./audit.service");
+const { decrypt } = require("../utils/crypto.util");
 
 class PaymentProvider {
   async createOrder({ amount, currency, receipt }) {
@@ -176,8 +177,250 @@ const getPaymentById = async (paymentId, user) => {
   return payment;
 };
 
+/**
+ * Fetch decrypted Doctor payment details for a specific consultation or appointment
+ */
+const getDoctorPaymentDetails = async (id, user) => {
+  // Can be appointmentId or consultationId
+  let consultation = await prisma.consultation.findFirst({
+    where: {
+      OR: [{ id }, { appointmentId: id }],
+    },
+    include: {
+      doctor: {
+        include: { user: { select: { id: true, name: true, phone: true } } },
+      },
+      patient: {
+        include: { user: { select: { id: true, name: true, phone: true } } },
+      },
+      prescription: true,
+      appointment: true,
+    },
+  });
+
+  let appointment = consultation?.appointment;
+  if (!consultation) {
+    appointment = await prisma.appointment.findUnique({
+      where: { id },
+      include: {
+        doctor: {
+          include: { user: { select: { id: true, name: true, phone: true } } },
+        },
+        patient: {
+          include: { user: { select: { id: true, name: true, phone: true } } },
+        },
+        consultation: { include: { prescription: true } },
+      },
+    });
+    if (!appointment) {
+      throw new NotFoundError("Consultation or Appointment not found");
+    }
+  }
+
+  const doctor = consultation?.doctor || appointment?.doctor;
+  if (!doctor) {
+    throw new NotFoundError("Assigned doctor not found");
+  }
+
+  const doctorName = doctor.user?.name ? (doctor.user.name.startsWith("Dr.") ? doctor.user.name : `Dr. ${doctor.user.name}`) : "Dr. Specialist";
+  const decryptedUpi = decrypt(doctor.upiId) || "9870924590@okaxis"; // fallback demo upi
+  const fee = doctor.consultationFee ? parseFloat(doctor.consultationFee) : 700;
+
+  // Build standard NPCI UPI Intent URI
+  const upiPayString = `upi://pay?pa=${encodeURIComponent(decryptedUpi)}&pn=${encodeURIComponent(doctorName)}&am=${fee.toFixed(2)}&cu=INR&tn=${encodeURIComponent("TeleDerma Consultation Fee")}`;
+
+  const isUnlocked = consultation?.prescription?.isUnlocked ?? true;
+
+  return {
+    doctorId: doctor.id,
+    doctorUserId: doctor.userId,
+    doctorName,
+    doctorPhone: doctor.user?.phone,
+    consultationFee: fee,
+    upiId: decryptedUpi,
+    upiPayString,
+    appointmentId: appointment?.id || consultation?.appointmentId,
+    consultationId: consultation?.id,
+    prescriptionId: consultation?.prescription?.id,
+    isUnlocked,
+    paymentStatus: appointment?.paymentStatus || "PENDING",
+  };
+};
+
+/**
+ * Patient claims they made the direct UPI payment
+ */
+const claimPaymentMade = async ({ appointmentId, consultationId, user, amount, upiReference }) => {
+  let apptId = appointmentId;
+  let consult = null;
+
+  if (consultationId) {
+    consult = await prisma.consultation.findUnique({
+      where: { id: consultationId },
+      include: { doctor: { include: { user: true } }, patient: { include: { user: true } } },
+    });
+    if (consult) apptId = consult.appointmentId;
+  }
+
+  const appointment = await prisma.appointment.findUnique({
+    where: { id: apptId },
+    include: { doctor: { include: { user: true } }, patient: { include: { user: true } } },
+  });
+
+  if (!appointment) {
+    throw new NotFoundError("Appointment not found");
+  }
+
+  const payAmount = amount || (appointment.doctor?.consultationFee ? parseFloat(appointment.doctor.consultationFee) : 700);
+
+  // Upsert payment record with status PENDING
+  const payment = await prisma.payment.upsert({
+    where: {
+      id: `pay_${apptId}`,
+    },
+    update: {
+      status: "PENDING",
+      amount: payAmount,
+      providerPaymentId: upiReference || `claim_${Date.now()}`,
+    },
+    create: {
+      id: `pay_${apptId}`,
+      appointmentId: apptId,
+      patientId: appointment.patientId,
+      amount: payAmount,
+      currency: "INR",
+      provider: "UPI_DIRECT",
+      providerOrderId: `claim_${Date.now()}`,
+      providerPaymentId: upiReference || `claim_${Date.now()}`,
+      status: "PENDING",
+    },
+  });
+
+  return {
+    paymentId: payment.id,
+    appointmentId: apptId,
+    consultationId: consult?.id,
+    doctorId: appointment.doctorId,
+    doctorUserId: appointment.doctor?.userId,
+    patientId: appointment.patientId,
+    patientName: appointment.patient?.user?.name || "Patient",
+    amount: payAmount,
+    status: "PENDING_VERIFICATION",
+  };
+};
+
+/**
+ * Doctor confirms receipt of direct UPI payment and unlocks prescription
+ */
+const confirmPaymentReceived = async ({ appointmentId, consultationId, user }) => {
+  let apptId = appointmentId;
+  let consult = null;
+
+  if (consultationId) {
+    consult = await prisma.consultation.findUnique({
+      where: { id: consultationId },
+      include: { prescription: { include: { items: true } }, appointment: true },
+    });
+    if (consult) apptId = consult.appointmentId;
+  }
+
+  const appointment = await prisma.appointment.findUnique({
+    where: { id: apptId },
+    include: {
+      consultation: { include: { prescription: { include: { items: true } } } },
+      doctor: { include: { user: true } },
+      patient: { include: { user: true } },
+    },
+  });
+
+  if (!appointment) {
+    throw new NotFoundError("Appointment not found");
+  }
+
+  // Update in a transaction: Payment -> SUCCESS, Appointment -> COMPLETED, Consultation -> COMPLETED, Prescription -> isUnlocked: true
+  const cRecord = consult || appointment.consultation;
+
+  // Find linked prescription whether attached to consultation or appointmentId directly
+  let rx = cRecord?.prescription;
+  if (!rx) {
+    rx = await prisma.prescription.findFirst({
+      where: {
+        OR: [
+          { appointmentId: apptId },
+          cRecord?.id ? { consultationId: cRecord.id } : undefined,
+        ].filter(Boolean),
+      },
+      include: { items: true },
+    });
+  }
+
+  const [updatedAppt] = await prisma.$transaction([
+    prisma.appointment.update({
+      where: { id: apptId },
+      data: {
+        status: "COMPLETED",
+        paymentStatus: "SUCCESS",
+      },
+    }),
+    ...(cRecord ? [
+      prisma.consultation.update({
+        where: { id: cRecord.id },
+        data: {
+          status: "COMPLETED",
+          endedAt: new Date(),
+        },
+      }),
+    ] : []),
+    ...(rx ? [
+      prisma.prescription.update({
+        where: { id: rx.id },
+        data: {
+          isUnlocked: true,
+        },
+      }),
+    ] : []),
+    prisma.payment.upsert({
+      where: { id: `pay_${apptId}` },
+      update: { status: "SUCCESS" },
+      create: {
+        id: `pay_${apptId}`,
+        appointmentId: apptId,
+        patientId: appointment.patientId,
+        amount: appointment.doctor?.consultationFee ? parseFloat(appointment.doctor.consultationFee) : 700,
+        currency: "INR",
+        provider: "UPI_DIRECT",
+        status: "SUCCESS",
+      },
+    }),
+  ]);
+
+  // Fetch complete unlocked prescription
+  let unlockedPrescription = null;
+  if (rx) {
+    unlockedPrescription = await prisma.prescription.findUnique({
+      where: { id: rx.id },
+      include: {
+        items: true,
+        doctor: { include: { user: { select: { name: true, phone: true } } } },
+        patient: { include: { user: { select: { name: true, phone: true } } } },
+      },
+    });
+  }
+
+  return {
+    appointment: updatedAppt,
+    consultation: cRecord,
+    prescription: unlockedPrescription,
+    patientId: appointment.patientId,
+    doctorId: appointment.doctorId,
+  };
+};
+
 module.exports = {
   createOrder,
   verifyPayment,
   getPaymentById,
+  getDoctorPaymentDetails,
+  claimPaymentMade,
+  confirmPaymentReceived,
 };

@@ -72,6 +72,12 @@ const createPrescription = async ({
     fullNotes = `${fullNotes}\nRecommended Follow-Up: ${followUpDate}`.trim();
   }
 
+  const doctorRecord = await prisma.doctor.findUnique({
+    where: { id: doctorUser.doctorId },
+  });
+  const hasFee = doctorRecord?.consultationFee && parseFloat(doctorRecord.consultationFee) > 0;
+  const isUnlockedInitial = !hasFee;
+
   // 4. Create or update prescription
   let prescription;
   if (consultation.prescription) {
@@ -84,6 +90,7 @@ const createPrescription = async ({
       where: { id: consultation.prescription.id },
       data: {
         notes: fullNotes || null,
+        isUnlocked: isUnlockedInitial,
         items: {
           create: items.map((item) => ({
             medicineName: item.medicineName,
@@ -112,6 +119,7 @@ const createPrescription = async ({
         patientId: targetPatientId,
         doctorId: doctorUser.doctorId,
         notes: fullNotes || null,
+        isUnlocked: isUnlockedInitial,
         items: {
           create: items.map((item) => ({
             medicineName: item.medicineName,
@@ -135,21 +143,22 @@ const createPrescription = async ({
     });
   }
 
-  // 5. Mark consultation as COMPLETED
-  await prisma.consultation.update({
-    where: { id: consultation.id },
-    data: {
-      status: "COMPLETED",
-      endedAt: new Date(),
-    },
-  });
-
-  // 6. Mark appointment as COMPLETED
-  if (consultation.appointmentId) {
-    await prisma.appointment.update({
-      where: { id: consultation.appointmentId },
-      data: { status: "COMPLETED" },
+  // 5. If free consultation, complete immediately; otherwise remains active awaiting payment confirmation
+  if (isUnlockedInitial) {
+    await prisma.consultation.update({
+      where: { id: consultation.id },
+      data: {
+        status: "COMPLETED",
+        endedAt: new Date(),
+      },
     });
+
+    if (consultation.appointmentId) {
+      await prisma.appointment.update({
+        where: { id: consultation.appointmentId },
+        data: { status: "COMPLETED" },
+      });
+    }
   }
 
   // 7. Audit log

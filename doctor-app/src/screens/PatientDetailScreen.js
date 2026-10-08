@@ -9,6 +9,7 @@ import {
   Image,
   useWindowDimensions,
   Alert,
+  Platform,
 } from 'react-native';
 import api from '../services/api';
 
@@ -74,6 +75,26 @@ export default function PatientDetailScreen({ route, navigation }) {
   };
 
   const handleStartConsultation = async () => {
+    // 5-minute joining restriction: doctor can only start 5 minutes before scheduled slot
+    const slotStartRaw = patient?.backendData?.slotStart || patient?.dateTime;
+    if (slotStartRaw) {
+      const slotStartTime = new Date(slotStartRaw).getTime();
+      const currentTime = Date.now();
+      const fiveMinutesBefore = slotStartTime - (5 * 60 * 1000);
+
+      if (!isNaN(slotStartTime) && currentTime < fiveMinutesBefore) {
+        const slotDate = new Date(slotStartTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const slotTime = new Date(slotStartTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const msg = `Scheduled for Later\n\nThis consultation is scheduled for ${slotDate} at ${slotTime}.\n\nYou can start the video call 5 minutes before the scheduled time.`;
+        if (Platform.OS === 'web') {
+          alert(msg);
+        } else {
+          Alert.alert('Scheduled for Later', msg);
+        }
+        return;
+      }
+    }
+
     try {
       setIsStartingCall(true);
       let consultation = patient?.backendData?.consultation;

@@ -74,7 +74,9 @@ const verifyOtp = async ({ phone, otp, role = "PATIENT", name, email }) => {
   const redisKey = `otp:${phone}`;
   const storedOtp = await redis.get(redisKey);
 
-  const isDevBypass = false;
+  const isDevBypass =
+    env.NODE_ENV === "development" &&
+    Boolean(env.DEV_OTP && otp === env.DEV_OTP);
 
   if (!storedOtp && !isDevBypass) {
     throw new BadRequestError("OTP expired or not requested");

@@ -17,6 +17,7 @@ const updateDoctorProfileSchema = {
     availableSlots: z.string().max(1000).optional().nullable(),
     consultationDuration: z.string().max(50).optional().nullable(),
     languages: z.string().max(200).optional().nullable(),
+    upiId: z.string().max(100).optional().nullable(),
     licenseNumber: z.string().max(50).optional().nullable(),
     bio: z.string().max(2000).optional().nullable(),
   }),

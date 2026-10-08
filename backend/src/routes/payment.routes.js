@@ -32,6 +32,24 @@ router.get(
   paymentController.getPaymentById
 );
 
+// Direct Doctor UPI Routes
+router.get(
+  "/doctor-upi/:id",
+  requireAuth,
+  paymentController.getDoctorPaymentDetails
+);
+
+router.post(
+  "/claim-paid",
+  requireAuth,
+  paymentController.claimPaymentMade
+);
+
+router.post(
+  "/confirm-received",
+  requireAuth,
+  paymentController.confirmPaymentReceived
+);
 
 router.post('/mock-success', requireAuth, async (req, res, next) => {
   try {

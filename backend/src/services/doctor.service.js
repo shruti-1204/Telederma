@@ -1,6 +1,7 @@
 const prisma = require("../config/prisma");
 const { NotFoundError, BadRequestError, ForbiddenError } = require("../utils/errors");
 const { createAuditLog } = require("./audit.service");
+const { encrypt, decrypt } = require("../utils/crypto.util");
 
 const getDoctorByUserId = async (userId) => {
   let doctor = await prisma.doctor.findUnique({
@@ -37,6 +38,7 @@ const getDoctorByUserId = async (userId) => {
 
   return {
     ...doctor,
+    upiId: decrypt(doctor.upiId),
     isProfileCompleted,
   };
 };
@@ -66,6 +68,7 @@ const updateDoctorProfile = async (userId, updateData) => {
     ...(age !== undefined && { age: age !== null && age !== "" ? parseInt(age, 10) : null }),
     ...(experienceYears !== undefined && { experienceYears: experienceYears !== null && experienceYears !== "" ? parseInt(experienceYears, 10) : null }),
     ...(consultationFee !== undefined && { consultationFee: consultationFee !== null && consultationFee !== "" ? parseFloat(consultationFee) : null }),
+    ...(doctorFields.upiId !== undefined && { upiId: doctorFields.upiId ? encrypt(doctorFields.upiId) : null }),
   };
 
   const updatedDoctor = await prisma.doctor.update({
@@ -98,6 +101,7 @@ const updateDoctorProfile = async (userId, updateData) => {
 
   return {
     ...updatedDoctor,
+    upiId: decrypt(updatedDoctor.upiId),
     isProfileCompleted,
   };
 };
@@ -122,7 +126,7 @@ const getVerifiedDoctors = async ({ specialization, search } = {}) => {
     ];
   }
 
-  return prisma.doctor.findMany({
+  const doctors = await prisma.doctor.findMany({
     where,
     include: {
       user: {
@@ -134,6 +138,8 @@ const getVerifiedDoctors = async ({ specialization, search } = {}) => {
     },
     orderBy: { createdAt: "desc" },
   });
+
+  return doctors.map(({ upiId, ...doc }) => doc);
 };
 
 const getDoctorById = async (doctorId) => {
@@ -153,7 +159,8 @@ const getDoctorById = async (doctorId) => {
     throw new NotFoundError("Doctor not found");
   }
 
-  return doctor;
+  const { upiId, ...doctorData } = doctor;
+  return doctorData;
 };
 
 const getDoctorAvailability = async (doctorId) => {

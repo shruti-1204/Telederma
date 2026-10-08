@@ -182,9 +182,29 @@ const endConsultation = async (consultationId, user) => {
   return updated;
 };
 
+const leaveConsultation = async (consultationId, user) => {
+  const consultation = await getConsultationById(consultationId, user);
+
+  // If status is ACTIVE and was not completed, reset back to SCHEDULED
+  if (consultation.status === "ACTIVE") {
+    const updated = await prisma.consultation.update({
+      where: { id: consultationId },
+      data: {
+        status: "SCHEDULED",
+        startedAt: null,
+      },
+    });
+    return updated;
+  }
+
+  return consultation;
+};
+
 module.exports = {
   createConsultation,
   getConsultationById,
   joinConsultation,
   endConsultation,
+  leaveConsultation,
 };
+
