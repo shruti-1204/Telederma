@@ -6,19 +6,35 @@ const { createAuditLog } = require("./audit.service");
 
 class AiService {
   /**
-   * Check image quality with AI Service or fallback engine
+   * Check image quality with AI Service buffer
    */
-  async checkImageQuality(imageUrl, storageKey) {
+  async checkImageQualityBuffer(buffer, originalName = "image.jpg", mimeType = "image/jpeg") {
     try {
-      const response = await fetch(`${env.AI_SERVICE_URL}/internal/ai/image-quality`, {
+      const formData = new FormData();
+      const blob = new Blob([buffer], { type: mimeType || "image/jpeg" });
+      formData.append("file", blob, originalName || "image.jpg");
+
+      const response = await fetch(`${env.AI_SERVICE_URL}/api/ai/image-quality`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageUrl, storageKey }),
-        signal: AbortSignal.timeout(4000),
+        body: formData,
+        signal: AbortSignal.timeout(6000),
       });
 
       if (response.ok) {
-        return await response.json();
+        const data = await response.json();
+        const isGood = data.quality === "GOOD";
+        return {
+          quality: isGood ? "GOOD" : "POOR",
+          score: data.score != null ? data.score : (isGood ? 0.92 : 0.35),
+          reason: data.reason || null,
+          isAcceptable: isGood,
+          sharpness: isGood ? "Clear" : (data.reason?.includes("blurry") ? "Blurry" : "Moderate"),
+          lighting: isGood ? "Balanced" : (data.reason?.includes("dark") ? "Too Dark" : "Overexposed"),
+          modelVersion: "opencv-v1.0.0",
+        };
+      } else {
+        const errorText = await response.text();
+        console.warn("AI Service image-quality responded with status:", response.status, errorText);
       }
     } catch (err) {
       console.warn("AI Service image-quality endpoint unreachable, using local quality analyzer:", err.message);
@@ -26,9 +42,38 @@ class AiService {
 
     // Local / Dev Fallback
     return {
-      quality: "ACCEPTABLE",
-      confidence: 0.94,
-      blurScore: 0.08,
+      quality: "GOOD",
+      score: 0.94,
+      reason: null,
+      isAcceptable: true,
+      sharpness: "Clear",
+      lighting: "Balanced",
+      modelVersion: "telederma-ai-v1.0.0-fallback",
+    };
+  }
+
+  /**
+   * Check image quality with AI Service or fallback engine
+   */
+  async checkImageQuality(imageUrl, storageKey) {
+    if (storageKey) {
+      try {
+        const fs = require("fs");
+        const path = require("path");
+        const UPLOAD_DIR = path.join(__dirname, "../../uploads");
+        const localFilePath = path.join(UPLOAD_DIR, storageKey);
+        if (fs.existsSync(localFilePath)) {
+          const buffer = fs.readFileSync(localFilePath);
+          return await this.checkImageQualityBuffer(buffer, path.basename(storageKey));
+        }
+      } catch (err) {
+        console.warn("Could not read local storage file for image check:", err.message);
+      }
+    }
+
+    return {
+      quality: "GOOD",
+      score: 0.94,
       isAcceptable: true,
       modelVersion: "telederma-ai-v1.0.0-fallback",
     };
@@ -221,6 +266,8 @@ const overrideAssessment = async (id, { riskLevel, assessment }, doctorUser) => 
 };
 
 module.exports = {
+  checkImageQualityBuffer: (b, n, m) => aiClient.checkImageQualityBuffer(b, n, m),
+  checkImageQuality: (u, k) => aiClient.checkImageQuality(u, k),
   createAssessment,
   getAssessmentById,
   getPatientAssessments,

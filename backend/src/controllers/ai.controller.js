@@ -46,7 +46,24 @@ const overrideAssessment = async (req, res, next) => {
   }
 };
 
+const checkImageQuality = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ status: "fail", message: "Image file is required" });
+    }
+    const result = await aiService.checkImageQualityBuffer(
+      req.file.buffer,
+      req.file.originalname,
+      req.file.mimetype
+    );
+    return sendSuccess(res, "Image quality analyzed", result);
+  } catch (err) {
+    return next(err);
+  }
+};
+
 module.exports = {
+  checkImageQuality,
   createAssessment,
   getAssessmentById,
   getMyAssessments,

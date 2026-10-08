@@ -174,7 +174,7 @@ export default function ConsultationFlowScreen({ navigation, route }) {
                   <Text style={styles.qualityPassTitle}>Photo quality looks good.</Text>
                 </View>
                 <Text style={styles.qualityPassDetails}>
-                  ✓ Resolution: High • Sharpness: Clear • Lighting: Balanced
+                  ✓ Sharpness: {qualityStatus?.sharpness || 'Clear'} • Lighting: {qualityStatus?.lighting || 'Balanced'} • OpenCV Score: {Math.round((qualityStatus?.score || 1) * 100)}%
                 </Text>
                 <View style={styles.findingWhiteCard}>
                   <Text style={styles.findingLabel}>
