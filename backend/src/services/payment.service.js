@@ -227,7 +227,10 @@ const getDoctorPaymentDetails = async (id, user) => {
   const fee = doctor.consultationFee ? parseFloat(doctor.consultationFee) : 700;
 
   // Build standard NPCI UPI Intent URI
-  const upiPayString = `upi://pay?pa=${encodeURIComponent(decryptedUpi)}&pn=${encodeURIComponent(doctorName)}&am=${fee.toFixed(2)}&cu=INR&tn=${encodeURIComponent("TeleDerma Consultation Fee")}`;
+  const cleanUpi = decryptedUpi.trim().toLowerCase();
+  const cleanName = doctorName.trim().replace(/\s+/g, "");
+  const tr = "TDR" + Date.now();
+  const upiPayString = `upi://pay?pa=${cleanUpi}&pn=${cleanName}&tr=${tr}&mc=0000&am=${fee.toFixed(2)}&cu=INR`;
 
   const isUnlocked = consultation?.prescription?.isUnlocked ?? true;
 

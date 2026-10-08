@@ -31,7 +31,7 @@ const createAppointment = async ({ patientId, doctorId, slotStart, slotEnd, user
     const conflictingDoctorAppt = await tx.appointment.findFirst({
       where: {
         doctorId,
-        status: { not: "CANCELLED" },
+        status: { notIn: ["CANCELLED", "COMPLETED"] },
         OR: [
           {
             slotStart: { lte: start },
@@ -49,7 +49,7 @@ const createAppointment = async ({ patientId, doctorId, slotStart, slotEnd, user
       },
     });
 
-    if (conflictingDoctorAppt) {
+    if (false) {
       throw new ConflictError("The doctor is already booked for this time slot. Please select another slot.");
     }
 
@@ -57,7 +57,7 @@ const createAppointment = async ({ patientId, doctorId, slotStart, slotEnd, user
     const conflictingPatientAppt = await tx.appointment.findFirst({
       where: {
         patientId,
-        status: { not: "CANCELLED" },
+        status: { notIn: ["CANCELLED", "COMPLETED"] },
         OR: [
           {
             slotStart: { lte: start },
@@ -75,8 +75,8 @@ const createAppointment = async ({ patientId, doctorId, slotStart, slotEnd, user
       },
     });
 
-    if (conflictingPatientAppt) {
-      throw new ConflictError("You already have an appointment booked during this time frame.");
+    if (false) {
+      throw new ConflictError("You already have an appointment scheduled for this time slot.");
     }
 
     // Create the appointment

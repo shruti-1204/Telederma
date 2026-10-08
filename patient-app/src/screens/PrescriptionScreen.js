@@ -12,6 +12,8 @@ import {
   Image,
   Linking,
 } from 'react-native';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 import { Colors } from '../theme/colors';
 import Header from '../components/Header';
 import MedicalDisclaimer from '../components/MedicalDisclaimer';
@@ -122,6 +124,64 @@ export default function PrescriptionScreen({ navigation, route }) {
     };
   }, []);
 
+  
+  const generatePdf = async () => {
+    try {
+      const pName = patient?.user?.name || patient?.name || 'Unknown Patient';
+      const pAge = patient?.age || 'N/A';
+      const pGender = patient?.gender || 'N/A';
+      const docNamePdf = rawRx?.doctorName || (rawRx?.doctor?.user?.name ? (rawRx.doctor.user.name.startsWith('Dr.') ? rawRx.doctor.user.name : `Dr. ${rawRx.doctor.user.name}`) : 'Doctor');
+      const rxDatePdf = rawRx?.date || new Date().toLocaleDateString('en-IN');
+      const medsHtml = (rawRx?.items || rawRx?.medicines || []).map(m => `
+        <tr><td><strong>${m.name || m.medicine}</strong></td><td>${m.dosage}</td><td>${m.frequency}</td><td>${m.duration || 'As prescribed'}</td></tr>
+      `).join('');
+      const notesPdf = rawRx?.notes || 'No additional notes provided.';
+
+      const html = `
+        <html>
+          <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
+            <style>
+              body { font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; padding: 40px; color: #111; line-height: 1.5; }
+              .header { display: flex; justify-content: space-between; border-bottom: 3px solid #047857; padding-bottom: 20px; }
+              .logo { font-size: 32px; font-weight: bold; color: #047857; letter-spacing: 1px; }
+              .doc-details { text-align: right; }
+              .patient-details { margin: 30px 0; display: flex; justify-content: space-between; background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; }
+              .rx-symbol { font-size: 48px; font-weight: bold; color: #1e293b; margin: 20px 0; }
+              table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+              th, td { border: 1px solid #cbd5e1; padding: 12px; text-align: left; }
+              th { background-color: #f1f5f9; font-weight: bold; }
+              .notes { margin-top: 30px; background: #fffbeb; padding: 15px; border-left: 4px solid #f59e0b; border-radius: 4px; }
+              .footer { margin-top: 60px; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 20px; }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <div><div class="logo">TeleDerma</div><div>Digital Dermatology Clinic</div></div>
+              <div class="doc-details"><h3>${docNamePdf}</h3><div>Dermatologist, MBBS MD</div><div>Reg: MC-12345</div></div>
+            </div>
+            <div class="patient-details">
+              <div><strong>Patient Name:</strong> ${pName}<br><strong>Age / Gender:</strong> ${pAge} / ${pGender}</div>
+              <div style="text-align: right;"><strong>Date:</strong> ${rxDatePdf}<br><strong>Rx ID:</strong> #${rawRx?.id || 'RX-001'}</div>
+            </div>
+            <div class="rx-symbol" style="font-style: italic;">Rx</div>
+            <table><tr><th>Medicine Name</th><th>Dosage</th><th>Frequency</th><th>Duration</th></tr>${medsHtml}</table>
+            ${notesPdf ? `<div class="notes"><div><strong>Doctor's Advice:</strong></div><div>${notesPdf}</div></div>` : ''}
+            <div class="footer"><p>This is a digitally generated e-prescription. Valid for online pharmacy dispensing.</p><p>Generated via TeleDerma Platform at ${new Date().toLocaleString()}</p></div>
+          </body>
+        </html>
+      `;
+      if (Platform.OS === 'web') {
+        await Print.printAsync({ html });
+      } else {
+        const { uri } = await Print.printToFileAsync({ html, base64: false });
+        await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+      }
+    } catch (err) {
+      Alert.alert("Error", "Could not generate PDF");
+    }
+  };
+
   const handleCopyUpi = () => {
     const upi = paymentDetails?.upiId || 'dr.kundan@upi';
     if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
@@ -131,15 +191,7 @@ export default function PrescriptionScreen({ navigation, route }) {
     setTimeout(() => setCopiedUpi(false), 2500);
   };
 
-  const handleOpenUpiApp = async () => {
-    const upiUrl = paymentDetails?.upiPayString;
-    if (!upiUrl) return;
-    try {
-      await Linking.openURL(upiUrl);
-    } catch (err) {
-      Alert.alert('Open UPI App', `Please transfer ₹${paymentDetails?.consultationFee || 700} to ${paymentDetails?.upiId || 'doctor@upi'}.`);
-    }
-  };
+  
 
   const handleClaimPayment = async () => {
     try {
@@ -220,13 +272,7 @@ export default function PrescriptionScreen({ navigation, route }) {
               <Image source={{ uri: qrUrl }} style={{ width: 180, height: 180, borderRadius: 8 }} resizeMode="contain" />
             </View>
 
-            {/* Open UPI App */}
-            <TouchableOpacity
-              onPress={handleOpenUpiApp}
-              style={{ backgroundColor: '#0F766E', padding: 14, borderRadius: 12, width: '100%', alignItems: 'center', marginBottom: 10 }}
-            >
-              <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>🚀 Open GPay / PhonePe / UPI App</Text>
-            </TouchableOpacity>
+            
 
             {/* Claim Paid */}
             {isPaymentClaimed ? (
@@ -273,7 +319,7 @@ export default function PrescriptionScreen({ navigation, route }) {
             style={{ backgroundColor: Colors.primary, padding: 16, borderRadius: 12, width: '100%', alignItems: 'center', marginBottom: 15 }}
             onPress={() => {
               setShowPostPaymentOptions(false);
-              setShouldPrint(true);
+              generatePdf();
             }}
           >
             <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>View & Auto-Print 📄</Text>
@@ -358,7 +404,7 @@ export default function PrescriptionScreen({ navigation, route }) {
           <Text style={styles.notesText}>{notes}</Text>
         </View>
         
-        <View style={{height: 40}} />
+        <TouchableOpacity style={{ backgroundColor: Colors.primary, paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 20, marginBottom: 40 }} onPress={generatePdf}><Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>Download PDF dY"E</Text></TouchableOpacity>
       </ScrollView>
       )}
     </SafeAreaView>

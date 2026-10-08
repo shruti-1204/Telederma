@@ -310,18 +310,7 @@ export default function VideoCallScreen({ navigation, route }) {
     setTimeout(() => setCopiedUpi(false), 2500);
   };
 
-  const handleOpenUpiApp = async () => {
-    const upiUrl = paymentDetails?.upiPayString;
-    if (!upiUrl) return;
-    try {
-      await Linking.openURL(upiUrl);
-    } catch (err) {
-      Alert.alert(
-        'Open UPI App',
-        `Please open Google Pay, PhonePe, or Paytm and transfer ₹${paymentDetails?.consultationFee || 700} to ${paymentDetails?.upiId || 'doctor@upi'}.`
-      );
-    }
-  };
+  
 
   const handleClaimPayment = async () => {
     try {
@@ -351,7 +340,10 @@ export default function VideoCallScreen({ navigation, route }) {
     const docName = paymentDetails?.doctorName || doctorName;
     const fee = paymentDetails?.consultationFee ?? (appointment?.consultationFee || 700);
     const upi = paymentDetails?.upiId || 'dr.kundan@upi';
-    const upiString = paymentDetails?.upiPayString || `upi://pay?pa=${encodeURIComponent(upi)}&pn=${encodeURIComponent(docName)}&am=${fee.toFixed(2)}&cu=INR&tn=TeleDerma%20Consultation%20Fee`;
+    const cleanUpi = (upi || "").trim().toLowerCase();
+    const cleanName = docName.trim().replace(/\s+/g, "");
+    const tr = "TDR" + Date.now();
+    const upiString = paymentDetails?.upiPayString || `upi://pay?pa=${cleanUpi}&pn=${cleanName}&tr=${tr}&mc=0000&am=${fee.toFixed(2)}&cu=INR`;
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiString)}`;
 
     return (
@@ -462,14 +454,7 @@ export default function VideoCallScreen({ navigation, route }) {
                 <Text style={styles.qrAmountNote}>Pre-configured for ₹{fee} directly to {docName}</Text>
               </View>
 
-              {/* Action 1: Open GPay / PhonePe UPI Intent Button */}
-              <TouchableOpacity
-                style={styles.openUpiBtn}
-                onPress={handleOpenUpiApp}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.openUpiBtnText}>🚀 Open GPay / PhonePe / UPI App</Text>
-              </TouchableOpacity>
+              
 
               {/* Action 2: I Have Paid Button or Live Waiting Status */}
               {isPaymentClaimed ? (
