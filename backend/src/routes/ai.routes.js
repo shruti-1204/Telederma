@@ -17,6 +17,11 @@ router.post(
 );
 
 router.post(
+  "/chat",
+  aiController.chat
+);
+
+router.post(
   "/assessments",
   requireAuth,
   requireRole("PATIENT"),

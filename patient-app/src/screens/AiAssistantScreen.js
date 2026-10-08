@@ -53,7 +53,7 @@ export default function AiAssistantScreen({ navigation }) {
     setIsTyping(true);
 
     try {
-      const response = await aiService.askAssistant(query);
+      const response = await aiService.askAssistant(query, messages);
       const aiMsg = {
         id: 'ai-' + Date.now(),
         sender: 'ai',

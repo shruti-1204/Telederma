@@ -7,12 +7,9 @@ load_dotenv()
 
 API_KEY = os.getenv("GEMINI_API_KEY")
 
-if not API_KEY:
-    raise RuntimeError("GEMINI_API_KEY is not set in .env")
+client = genai.Client(api_key=API_KEY) if API_KEY else None
 
-client = genai.Client(api_key=API_KEY)
-
-MODEL_NAME = "gemini-3.5-flash-lite"
+MODEL_NAME = "gemini-2.5-flash"
 
 
 SYSTEM_PROMPT = """
@@ -117,10 +114,30 @@ STYLE:
 """
 
 
+def _fallback_education_response(user_message: str) -> str:
+    msg = user_message.lower()
+    if "acne" in msg or "pimple" in msg or "breakout" in msg:
+        return "Acne occurs when hair follicles become clogged with oil and dead skin cells. Over-the-counter options often include salicylic acid or benzoyl peroxide. For persistent or cystic acne, a dermatologist consultation is advised."
+    elif "eczema" in msg or "dermatitis" in msg:
+        return "Eczema refers to conditions that cause inflamed, irritated, and itchy skin. Gentle moisturizing with ceramides helps soothe flare-ups. A dermatologist can prescribe targeted topical anti-inflammatory treatments."
+    elif "psoriasis" in msg:
+        return "Psoriasis is a chronic condition causing rapid skin cell turnover and scaly patches. It is not contagious. Dermatologists treat it with targeted topicals, light therapy, or prescription medications."
+    elif "dry" in msg or "flak" in msg:
+        return "Dry skin often stems from an impaired moisture barrier. Applying a hydrating ceramide cream immediately after washing helps lock in moisture. Avoid harsh physical scrubs and hot water."
+    elif "triage" in msg:
+        return "TeleDerma AI triage classifies cases into GREEN (routine / no escalation), YELLOW (dermatologist review advised), and RED (prompt clinical evaluation needed)."
+    elif "diagnos" in msg or "what do i have" in msg or "what is this" in msg:
+        return "I cannot provide a personal medical diagnosis through chat. Please use TeleDerma's 'Start Consultation' to upload a clear skin photo and questionnaire for certified dermatologist review."
+    else:
+        return "I am your TeleDerma AI Skin Assistant. You can ask me general questions about skin care, common conditions, or use 'Start Consultation' to upload photos for doctor review."
+
+
 def get_chat_response(
     user_message: str,
     conversation_history: list | None = None
 ) -> str:
+    if not API_KEY or client is None:
+        return _fallback_education_response(user_message)
 
     history = conversation_history or []
 
@@ -143,18 +160,22 @@ def get_chat_response(
             )
         )
 
-    chat = client.chats.create(
-        model=MODEL_NAME,
-        history=chat_history,
-        config=types.GenerateContentConfig(
-            system_instruction=SYSTEM_PROMPT,
-            max_output_tokens=300,
-            temperature=0.3,
-        ),
-    )
+    try:
+        chat = client.chats.create(
+            model=MODEL_NAME,
+            history=chat_history,
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                max_output_tokens=300,
+                temperature=0.3,
+            ),
+        )
 
-    response = chat.send_message(
-        message=user_message
-    )
+        response = chat.send_message(
+            message=user_message
+        )
 
-    return response.text
+        return response.text
+    except Exception as e:
+        print(f"Gemini API error ({e}), using educational fallback.")
+        return _fallback_education_response(user_message)

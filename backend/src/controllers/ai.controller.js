@@ -62,8 +62,22 @@ const checkImageQuality = async (req, res, next) => {
   }
 };
 
+const chat = async (req, res, next) => {
+  try {
+    const { message, history } = req.body;
+    if (!message || typeof message !== "string") {
+      return res.status(400).json({ status: "fail", message: "Message is required" });
+    }
+    const result = await aiService.chatWithAssistant(message, history || []);
+    return sendSuccess(res, "Chat response generated", result);
+  } catch (err) {
+    return next(err);
+  }
+};
+
 module.exports = {
   checkImageQuality,
+  chat,
   createAssessment,
   getAssessmentById,
   getMyAssessments,

@@ -118,6 +118,31 @@ class AiService {
       modelVersion: "telederma-ai-v1.0.0-clinical-core",
     };
   }
+
+  /**
+   * Educational Chatbot Assistant powered by Python AI / Gemini
+   */
+  async chatWithAssistant(message, history = []) {
+    try {
+      const response = await fetch(`${env.AI_SERVICE_URL}/api/ai/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, history }),
+        signal: AbortSignal.timeout(10000),
+      });
+
+      if (response.ok) {
+        return await response.json();
+      }
+    } catch (err) {
+      console.warn("AI Service chat endpoint unreachable, using fallback:", err.message);
+    }
+
+    return {
+      reply: "Thank you for your question. As your TeleDerma AI Skin Assistant, I provide educational guidance on skincare ingredients and common skin conditions. For personal diagnosis or medical prescriptions, please start a consultation with our verified dermatologists.",
+      disclaimer: "General information only, not medical advice.",
+    };
+  }
 }
 
 const aiClient = new AiService();
@@ -268,6 +293,7 @@ const overrideAssessment = async (id, { riskLevel, assessment }, doctorUser) => 
 module.exports = {
   checkImageQualityBuffer: (b, n, m) => aiClient.checkImageQualityBuffer(b, n, m),
   checkImageQuality: (u, k) => aiClient.checkImageQuality(u, k),
+  chatWithAssistant: (m, h) => aiClient.chatWithAssistant(m, h),
   createAssessment,
   getAssessmentById,
   getPatientAssessments,

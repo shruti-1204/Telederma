@@ -187,34 +187,72 @@ export const aiService = {
     };
   },
 
-  // Educational Chat Assistant (Skin Assistant)
-  askAssistant: async (question = '') => {
-    await new Promise(resolve => setTimeout(resolve, 700));
-    const lower = question.toLowerCase();
+  // Educational Chat Assistant (Skin Assistant) powered by live AI / Gemini
+  askAssistant: async (question = '', history = []) => {
+    try {
+      const formattedHistory = (history || [])
+        .filter((h) => h.text && (h.sender === 'user' || h.sender === 'ai'))
+        .map((h) => ({
+          role: h.sender === 'user' ? 'user' : 'model',
+          content: h.text,
+        }));
 
+      const response = await api.post('/ai/chat', {
+        message: question,
+        history: formattedHistory,
+      });
+
+      if (response.data?.data) {
+        const { reply, disclaimer } = response.data.data;
+
+        // Contextual suggestion chips
+        const lower = question.toLowerCase();
+        let suggestions = ['Start Consultation', 'Book Dermatologist', 'Check Image Quality'];
+        if (lower.includes('acne') || lower.includes('pimple') || lower.includes('breakout')) {
+          suggestions = ['Adapalene vs Benzoyl Peroxide', 'Start Consultation', 'Sunscreen for acne'];
+        } else if (lower.includes('dry') || lower.includes('flak') || lower.includes('barrier')) {
+          suggestions = ['How to repair skin barrier?', 'Best moisturizers', 'Book Dermatologist'];
+        } else if (lower.includes('rash') || lower.includes('itch') || lower.includes('eczema')) {
+          suggestions = ['Eczema trigger factors', 'Start Consultation', 'Soothing ingredients'];
+        } else if (lower.includes('triage') || lower.includes('risk')) {
+          suggestions = ['Explain GREEN triage', 'Explain RED triage', 'Start Consultation'];
+        }
+
+        return {
+          reply: reply || 'Here is educational guidance from your TeleDerma Assistant.',
+          disclaimer: disclaimer || 'General information only, not medical advice.',
+          suggestions,
+        };
+      }
+    } catch (err) {
+      console.warn('[aiService] Live AI chat error, using fallback:', err.message);
+    }
+
+    // Client fallback if network or backend is unreachable
+    const lower = question.toLowerCase();
     if (lower.includes('dry') || lower.includes('flak')) {
       return {
-        reply: 'Dryness is often caused by an impaired epidermal moisture barrier. Key general tips:\n• Use a gentle hydrating cleanser with ceramides or hyaluronic acid.\n• Apply moisturizer immediately on damp skin after cleansing.\n• Avoid harsh physical scrubs and hot water.\n\nWould you like to start a consultation with a dermatologist for a targeted prescription?',
+        reply: 'Dryness is often caused by an impaired epidermal moisture barrier. Key general tips:\n• Use a gentle hydrating cleanser with ceramides.\n• Apply moisturizer immediately after cleansing.\n• Avoid harsh physical scrubs and hot water.',
         suggestions: ['How to repair skin barrier?', 'Best ingredients for dry skin', 'Book Dermatologist'],
       };
     }
 
     if (lower.includes('acne') || lower.includes('pimple') || lower.includes('breakout')) {
       return {
-        reply: 'Acne develops when hair follicles become plugged with sebum and dead cells. Dermatologists commonly assess whether it is comedonal (blackheads/whiteheads) or inflammatory (papules/pustules).\n• Avoid popping or squeezing.\n• Look for ingredients like Salicylic Acid or Adapalene.\n• Always wear non-comedogenic sunscreen.\n\nWe recommend uploading a clear photo in "Start Consultation" to check quality and get tailored dermatologist review.',
+        reply: 'Acne develops when hair follicles become plugged with sebum and dead cells.\n• Avoid popping or squeezing.\n• Look for ingredients like Salicylic Acid or Adapalene.\n• Always wear non-comedogenic sunscreen.',
         suggestions: ['Adapalene vs Benzoyl Peroxide', 'Start Consultation', 'Sunscreen tips'],
       };
     }
 
     if (lower.includes('rash') || lower.includes('itch') || lower.includes('red')) {
       return {
-        reply: 'Itching and redness can stem from contact dermatitis, eczema flare-ups, or mild fungal irritation. Avoid applying heavily fragranced lotions. If the area feels hot, swollen, or spreads rapidly, medical evaluation is recommended.',
+        reply: 'Itching and redness can stem from contact dermatitis, eczema flare-ups, or mild barrier irritation. Avoid heavily fragranced lotions. If the area feels hot, swollen, or spreads rapidly, medical evaluation is recommended.',
         suggestions: ['Start Consultation', 'Find Dermatologist', 'Mild soothing tips'],
       };
     }
 
     return {
-      reply: 'Thank you for your question. As your AI Skin Assistant, I provide educational guidance on skincare ingredients and general dermatological concepts.\n\nFor any persistent irritation or lesions, our dermatologists can review your photos and issue digital prescriptions.',
+      reply: 'I am your TeleDerma AI Skin Assistant. I provide educational guidance on skincare ingredients and common skin conditions. For personal diagnosis or prescriptions, please start a consultation with our verified dermatologists.',
       suggestions: ['Check Image Quality', 'Start Consultation', 'Browse Doctors'],
     };
   },
