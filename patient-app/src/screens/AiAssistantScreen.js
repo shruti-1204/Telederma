@@ -36,6 +36,13 @@ export default function AiAssistantScreen({ navigation }) {
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const scrollViewRef = useRef();
+  const handleSuggestionPress = (sug) => {
+    if (sug.includes('Start Doctor Consultation') || sug.includes('Start Consultation') || sug.includes('Book Dermatologist')) {
+      navigation.navigate('ConsultationFlow', { initialStep: 1 });
+      return;
+    }
+    handleSend(sug);
+  };
 
   const handleSend = async (textToSend) => {
     const query = textToSend || inputText;
@@ -105,11 +112,6 @@ export default function AiAssistantScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Disclaimer */}
-        <View style={{ paddingHorizontal: 16 }}>
-          <MedicalDisclaimer compact={true} />
-        </View>
-
         {/* Chat Feed */}
         <ScrollView
           ref={scrollViewRef}
@@ -143,7 +145,7 @@ export default function AiAssistantScreen({ navigation }) {
                         <TouchableOpacity
                           key={idx}
                           style={styles.suggestionChip}
-                          onPress={() => handleSend(sug)}
+                          onPress={() => handleSuggestionPress(sug)}
                         >
                           <Text style={styles.suggestionChipText}>{sug}</Text>
                         </TouchableOpacity>

@@ -11,6 +11,8 @@ import {
   Platform,
   ActivityIndicator,
   Modal,
+  PanResponder,
+  Dimensions,
 } from 'react-native';
 import api from '../services/api';
 import { socketService } from '../services/socketService';
@@ -44,6 +46,99 @@ const VideoCallScreen = ({ route, navigation }) => {
   ]);
   const [notes, setNotes] = useState('Clean face with mild cleanser before applying. Use sunscreen every morning.');
   const [isSavingRx, setIsSavingRx] = useState(false);
+
+  // Resizable Split Section States (Smooth Drag for Web & Mobile/Tablet)
+  const [splitRatio, setSplitRatio] = useState(0.42);
+  const splitRatioRef = useRef(0.42);
+  const startRatioRef = useRef(0.42);
+  const containerHeightRef = useRef(
+    Platform.OS === 'web' && typeof window !== 'undefined'
+      ? window.innerHeight
+      : Dimensions.get('window').height
+  );
+
+  const updateSplitRatio = (newRatio) => {
+    // Keep within [20%, 78%] bounds so both video and prescription remain visible & functional
+    const clamped = Math.max(0.2, Math.min(0.78, newRatio));
+    splitRatioRef.current = clamped;
+    setSplitRatio(clamped);
+  };
+
+  // Web desktop mouse drag resizing
+  const handleMouseDownWeb = (e) => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    e.preventDefault?.();
+    const startY = e.clientY;
+    const initialRatio = splitRatioRef.current;
+    const totalH = containerHeightRef.current || window.innerHeight;
+
+    const handleMouseMove = (moveEvent) => {
+      moveEvent.preventDefault?.();
+      const deltaY = moveEvent.clientY - startY;
+      const deltaRatio = deltaY / totalH;
+      updateSplitRatio(initialRatio + deltaRatio);
+    };
+
+    const handleMouseUp = () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
+  // Web touchscreen resizing (tablet / mobile browser)
+  const handleTouchStartWeb = (e) => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const touch = e.touches?.[0];
+    if (!touch) return;
+    const startY = touch.clientY;
+    const initialRatio = splitRatioRef.current;
+    const totalH = containerHeightRef.current || window.innerHeight;
+
+    const handleTouchMove = (moveEvent) => {
+      const moveTouch = moveEvent.touches?.[0];
+      if (!moveTouch) return;
+      const deltaY = moveTouch.clientY - startY;
+      const deltaRatio = deltaY / totalH;
+      updateSplitRatio(initialRatio + deltaRatio);
+    };
+
+    const handleTouchEnd = () => {
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
+
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
+    window.addEventListener('touchend', handleTouchEnd);
+  };
+
+  // Native React Native PanResponder (iOS / Android phones & tablets)
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        startRatioRef.current = splitRatioRef.current;
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        const totalH =
+          containerHeightRef.current || Dimensions.get('window').height;
+        const deltaRatio = gestureState.dy / totalH;
+        updateSplitRatio(startRatioRef.current + deltaRatio);
+      },
+      onPanResponderRelease: () => {},
+    })
+  ).current;
+
+  const dividerProps =
+    Platform.OS === 'web'
+      ? {
+          onMouseDown: handleMouseDownWeb,
+          onTouchStart: handleTouchStartWeb,
+        }
+      : panResponder.panHandlers;
 
   const webrtcRef = useRef(null);
 
@@ -343,11 +438,17 @@ const VideoCallScreen = ({ route, navigation }) => {
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
+      onLayout={(e) => {
+        const { height } = e.nativeEvent.layout;
+        if (height > 0) {
+          containerHeightRef.current = height;
+        }
+      }}
     >
       {/* ========================================== */}
       {/* TOP HALF: LIVE WEBRTC VIDEO CALL SECTION  */}
       {/* ========================================== */}
-      <View style={styles.videoSection}>
+      <View style={[styles.videoSection, { height: `${(splitRatio * 100).toFixed(1)}%` }]}>
         {/* Main Patient Video Display */}
         <View style={styles.patientVideoArea}>
           {remoteStream ? (
@@ -411,6 +512,22 @@ const VideoCallScreen = ({ route, navigation }) => {
               </Text>
             )}
           </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* ========================================== */}
+      {/* DRAGGABLE / RESIZABLE DIVIDER              */}
+      {/* ========================================== */}
+      <View
+        {...dividerProps}
+        style={styles.resizeDivider}
+        accessibilityLabel="Draggable divider to resize video and prescription sections"
+        accessibilityRole="adjustable"
+      >
+        <View style={styles.resizeHandleBar}>
+          <View style={styles.handleDot} />
+          <View style={styles.handleDot} />
+          <View style={styles.handleDot} />
         </View>
       </View>
 
@@ -593,6 +710,39 @@ const styles = StyleSheet.create({
   controlBtnText: { color: '#fff', fontSize: 18 },
   endCallBtn: { backgroundColor: '#DC2626', paddingHorizontal: 16, borderColor: '#B91C1C' },
   endCallText: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
+
+  resizeDivider: {
+    height: 22,
+    backgroundColor: '#0D1B18',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 20,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(42, 157, 143, 0.3)',
+    ...(Platform.OS === 'web'
+      ? {
+          cursor: 'row-resize',
+          userSelect: 'none',
+        }
+      : {}),
+  },
+  resizeHandleBar: {
+    width: 48,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#2A9D8F',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 4,
+  },
+  handleDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: '#ffffff',
+    opacity: 0.9,
+  },
 
   prescriptionSection: {
     flex: 1,

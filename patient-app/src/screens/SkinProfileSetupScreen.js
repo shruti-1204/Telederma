@@ -131,6 +131,81 @@ export default function SkinProfileSetupScreen({ navigation }) {
     }
   };
 
+  const renderPreviousSkinProblemsDisplay = (rawVal) => {
+    if (!rawVal || !String(rawVal).trim()) {
+      return <Text style={styles.fieldDisplayVal}>None reported</Text>;
+    }
+
+    const strVal = String(rawVal).trim();
+    if (strVal.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(strVal);
+        const triage = parsed.triageLevel;
+        const symptomsList = Array.isArray(parsed.symptoms)
+          ? parsed.symptoms.join(', ')
+          : (parsed.symptoms || [
+              parsed.itching ? `Itching: ${parsed.itching}` : null,
+              parsed.pain ? `Pain: ${parsed.pain}` : null,
+              parsed.spreading ? `Spreading: ${parsed.spreading}` : null,
+            ].filter(Boolean).join(', '));
+        const duration = parsed.duration;
+        const area = parsed.affectedArea;
+        const observation = parsed.observation;
+
+        const triageColor =
+          triage === 'RED' ? '#DC2626' :
+          triage === 'ORANGE' ? '#EA580C' :
+          '#D97706';
+
+        return (
+          <View style={styles.skinProblemSummaryContainer}>
+            {triage ? (
+              <View style={styles.summaryLineRow}>
+                <Text style={styles.summaryLineLabel}>Triage Level: </Text>
+                <Text style={[styles.summaryLineValue, { color: triageColor, fontWeight: '700' }]}>
+                  {triage}
+                </Text>
+              </View>
+            ) : null}
+
+            {symptomsList ? (
+              <View style={styles.summaryLineRow}>
+                <Text style={styles.summaryLineLabel}>Symptoms: </Text>
+                <Text style={styles.summaryLineValue}>{symptomsList}</Text>
+              </View>
+            ) : null}
+
+            {duration ? (
+              <View style={styles.summaryLineRow}>
+                <Text style={styles.summaryLineLabel}>Duration: </Text>
+                <Text style={styles.summaryLineValue}>{duration}</Text>
+              </View>
+            ) : null}
+
+            {area ? (
+              <View style={styles.summaryLineRow}>
+                <Text style={styles.summaryLineLabel}>Affected Area: </Text>
+                <Text style={styles.summaryLineValue}>{area}</Text>
+              </View>
+            ) : null}
+
+            {observation ? (
+              <View style={styles.summaryLineRow}>
+                <Text style={styles.summaryLineLabel}>Observation: </Text>
+                <Text style={styles.summaryLineValue}>{observation}</Text>
+              </View>
+            ) : null}
+          </View>
+        );
+      } catch (e) {
+        const sanitized = strVal.replace(/"photoUri":\s*"data:[^"]+"/g, '"photoUri": "[Photo attached]"');
+        return <Text style={styles.fieldDisplayVal}>{sanitized}</Text>;
+      }
+    }
+
+    return <Text style={styles.fieldDisplayVal}>{strVal}</Text>;
+  };
+
   const isMedicalEmpty =
     !patient?.allergies &&
     !patient?.existingConditions &&
@@ -402,7 +477,7 @@ export default function SkinProfileSetupScreen({ navigation }) {
             {/* Previous Skin Problems */}
             <View style={styles.fieldItem}>
               <Text style={styles.fieldLabel}>Previous Skin Problems</Text>
-              {isEditing ? (
+              {isEditing && !String(previousSkinProblems || '').trim().startsWith('{') ? (
                 <TextInput
                   style={styles.fieldInput}
                   value={previousSkinProblems}
@@ -410,9 +485,7 @@ export default function SkinProfileSetupScreen({ navigation }) {
                   placeholder="e.g. Acne Vulgaris, Eczema, Psoriasis"
                 />
               ) : (
-                <Text style={styles.fieldDisplayVal}>
-                  {previousSkinProblems || 'None reported'}
-                </Text>
+                renderPreviousSkinProblemsDisplay(previousSkinProblems)
               )}
             </View>
 
@@ -844,6 +917,31 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1E293B',
     paddingVertical: 4,
+  },
+  skinProblemSummaryContainer: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 12,
+    marginTop: 4,
+    gap: 6,
+  },
+  summaryLineRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+  },
+  summaryLineLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  summaryLineValue: {
+    fontSize: 13,
+    color: '#1E293B',
+    flex: 1,
+    lineHeight: 18,
   },
   fieldInput: {
     height: 44,

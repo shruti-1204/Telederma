@@ -202,84 +202,8 @@ export default function DashboardScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Important Medical Disclaimer */}
-        <MedicalDisclaimer />
-
-        {/* REAL-TIME VERIFIED DOCTORS CAROUSEL */}
-        <View style={styles.verifiedDoctorsSection}>
-          <View style={styles.sectionHeaderRow}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <View style={styles.livePulseDot} />
-              <Text style={styles.sectionHeaderTitle}>Verified Dermatologists Online</Text>
-            </View>
-            <TouchableOpacity onPress={() => navigation.navigate('DoctorList')} activeOpacity={0.7}>
-              <Text style={styles.seeAllText}>View All ({registeredDoctors.length}) ➔</Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.sectionSubtitle}>
-            Direct appointments with certified doctors registered in the database
-          </Text>
-
-          {loadingDoctors ? (
-            <View style={{ paddingVertical: 20, alignItems: 'center' }}>
-              <ActivityIndicator color={Colors.primary} />
-            </View>
-          ) : registeredDoctors.length === 0 ? (
-            <View style={styles.noDocBox}>
-              <Text style={{ color: Colors.textMuted }}>No registered doctors found.</Text>
-            </View>
-          ) : (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.docCardsRow}
-            >
-              {registeredDoctors.map((doc) => (
-                <View key={doc.id} style={styles.miniDocCard}>
-                  <View style={styles.miniDocTop}>
-                    <View style={styles.miniAvatar}>
-                      <Text style={styles.miniAvatarText}>
-                        {doc.name.replace('Dr. ', '').split(' ').map((w) => w[0]).join('')}
-                      </Text>
-                    </View>
-                    <View style={{ flex: 1, marginLeft: 10 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Text style={styles.miniDocName} numberOfLines={1}>{doc.name}</Text>
-                        <Text style={styles.miniVerifiedBadge}>✓</Text>
-                      </View>
-                      <Text style={styles.miniDocSpec} numberOfLines={1}>{doc.specialization}</Text>
-                    </View>
-                  </View>
-                  <View style={styles.miniDocBottom}>
-                    <View>
-                      <Text style={styles.miniFeeLabel}>Fee</Text>
-                      <Text style={styles.miniFeeVal}>₹{doc.fee}</Text>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.miniBookBtn}
-                      onPress={() => handleBookDoctorDirect(doc)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.miniBookBtnText}>Book Slot ➔</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ))}
-            </ScrollView>
-          )}
-        </View>
-
-        {/* 5 Main Action Cards Grid */}
+        {/* Main Action Cards Grid */}
         <View style={styles.actionCardsSection}>
-          {/* Card 0: Direct Doctor Booking (Highlighted Primary) */}
-          <ActionCard
-            title="Book Verified Dermatologist"
-            subtitle="Select from registered doctors (Dr. Kundan & team), choose date & time, and book instantly."
-            icon="👨‍⚕️"
-            iconBg="#E0F2FE"
-            borderColor="#0284C7"
-            onPress={() => navigation.navigate('DoctorList')}
-          />
 
           {/* Card 1: Start Consultation (Purple) */}
           <ActionCard
@@ -411,32 +335,6 @@ export default function DashboardScreen({ navigation }) {
               </TouchableOpacity>
             </View>
 
-            {/* Card 3: Latest Prescription */}
-            <View style={[styles.summaryCard, styles.summaryCardPrescription]}>
-              <View style={styles.summaryHeaderRow}>
-                <Text style={styles.summaryBadgeLabelOrange}>🔗 LATEST PRESCRIPTION</Text>
-              </View>
-              <View style={{ flex: 1, minHeight: 46, justifyContent: 'center' }}>
-                <Text style={{ fontSize: 13, color: Colors.textSecondary }}>
-                  {latestPrescription ? `${latestPrescription.doctorName || 'Doctor'} Rx` : 'No Prescriptions Yet'}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={styles.prescriptionBtn}
-                onPress={() => {
-                  if (latestPrescription) {
-                    navigation.navigate('Prescription', { prescription: latestPrescription });
-                  } else {
-                    navigation.navigate('MedicalRecords');
-                  }
-                }}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.prescriptionBtnText}>
-                  {latestPrescription ? 'View Prescription' : 'View Records'}
-                </Text>
-              </TouchableOpacity>
-            </View>
           </ScrollView>
         </View>
 

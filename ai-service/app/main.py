@@ -97,8 +97,5 @@ class ChatIn(BaseModel):
 
 @app.post("/api/ai/chat")
 async def chat(payload: ChatIn):
-    reply = get_chat_response(payload.message, payload.history)
-    return {
-        "reply": reply,
-        "disclaimer": "General information only, not medical advice."
-    }
+    result = get_chat_response(payload.message, payload.history)
+    return result

@@ -2,7 +2,7 @@ const { z } = require("zod");
 
 const searchMedicineSchema = {
   query: z.object({
-    q: z.string().min(1, "Search query is required"),
+    q: z.string().optional(),
   }),
 };
 

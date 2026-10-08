@@ -32,7 +32,7 @@ def triage_decision(predicted_class, confidence, symptoms):
     # Low-confidence prediction
     if confidence < 0.3:
         return (
-            "YELLOW",
+            "ORANGE",
             "Low model confidence - dermatologist review recommended"
         )
 
@@ -41,11 +41,11 @@ def triage_decision(predicted_class, confidence, symptoms):
 
     if predicted_class in high_risk_classes and confidence > 0.4:
         return (
-            "YELLOW",
+            "ORANGE",
             f"Possible {predicted_class} - dermatologist evaluation advised"
         )
 
     return (
-        "GREEN",
+        "YELLOW",
         "No escalation rule triggered based on the available information"
     )

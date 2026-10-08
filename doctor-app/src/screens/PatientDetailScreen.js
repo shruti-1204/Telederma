@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import api from '../services/api';
+import api, { getHost } from '../services/api';
 
 export default function PatientDetailScreen({ route, navigation }) {
   const { width } = useWindowDimensions();
@@ -61,17 +61,78 @@ export default function PatientDetailScreen({ route, navigation }) {
   const skinType = patient?.skinType || 'Not specified';
   const skinTone = patient?.skinTone || 'Not specified';
   const medicalHistory = patient?.medicalHistory || 'None provided';
-  const skinPhoto = patient?.skinPhoto || null;
+
+  const resolveSkinPhotoUri = (uri) => {
+    if (!uri) return null;
+    if (uri.startsWith('data:') || uri.startsWith('http://') || uri.startsWith('https://')) {
+      return uri;
+    }
+    const host = getHost ? getHost() : 'localhost';
+    const clean = uri.startsWith('/') ? uri : `/${uri}`;
+    return `http://${host}:5000${clean}`;
+  };
+
+  const initialSkinPhoto = resolveSkinPhotoUri(
+    patient?.skinPhoto ||
+    patient?.backendData?.consultation?.skinImages?.[0]?.storageKey ||
+    patient?.backendData?.patient?.skinImages?.[0]?.storageKey ||
+    null
+  );
+
+  const [skinPhoto, setSkinPhoto] = useState(initialSkinPhoto);
+  const [imageError, setImageError] = useState(false);
+
+  // Fallback: If skinPhoto wasn't found in passed route params, query backend appointment directly
+  useEffect(() => {
+    let isMounted = true;
+    const fetchFreshSkinPhoto = async () => {
+      const apptId = patient?.id || patient?.backendData?.id;
+      if (!apptId) return;
+      try {
+        const res = await api.get(`/appointments/${apptId}`);
+        if (res.data?.data && isMounted) {
+          const freshAppt = res.data.data;
+          let foundUri =
+            freshAppt.consultation?.skinImages?.[0]?.storageKey ||
+            freshAppt.patient?.skinImages?.[0]?.storageKey ||
+            null;
+
+          if (!foundUri && freshAppt.consultation?.aiAssessments?.[0]?.assessment) {
+            try {
+              const parsed = JSON.parse(freshAppt.consultation.aiAssessments[0].assessment);
+              if (parsed.photoUri) foundUri = parsed.photoUri;
+            } catch (_) {}
+          }
+
+          if (!foundUri && freshAppt.patient?.skinHistory) {
+            try {
+              const parsed = JSON.parse(freshAppt.patient.skinHistory);
+              if (parsed.photoUri) foundUri = parsed.photoUri;
+            } catch (_) {}
+          }
+
+          if (foundUri) {
+            const resolved = resolveSkinPhotoUri(foundUri);
+            setSkinPhoto(resolved);
+            setImageError(false);
+          }
+        }
+      } catch (_) {}
+    };
+
+    if (!skinPhoto) {
+      fetchFreshSkinPhoto();
+    }
+    return () => { isMounted = false; };
+  }, [patient?.id]);
 
   const questionnaire = patient?.questionnaire || {
-    'Main Concern': 'Rash',
-    'Problem Duration': '1–2 weeks',
-    'Spreading': 'Slowly',
-    'Worsening': 'Yes',
-    'Itching Severity': 'Severe',
-    'Pain Severity': 'Severe',
-    'Swelling / Bleeding / Pus': 'No / No / No',
-    'Fever': 'No',
+    'Main Concern': patient?.symptoms || 'Skin Consultation',
+    'Problem Duration': patient?.duration || 'Today',
+    'Spreading': patient?.progression || 'No',
+    'Itching Severity': 'None',
+    'Pain Severity': 'None',
+    'Emergency Flags': 'None',
   };
 
   const handleStartConsultation = async () => {
@@ -194,17 +255,6 @@ export default function PatientDetailScreen({ route, navigation }) {
               <Text style={styles.createRxBtnText}>{isCompleted ? '📄 View / Edit Rx' : '📄 Create Prescription'}</Text>
             </TouchableOpacity>
           </View>
-        </View>
-
-        {/* 2. IMPORTANT MEDICAL DISCLAIMER BANNER */}
-        <View style={styles.disclaimerCard}>
-          <View style={styles.disclaimerHeader}>
-            <Text style={styles.disclaimerIcon}>🛡️</Text>
-            <Text style={styles.disclaimerTitle}>IMPORTANT MEDICAL DISCLAIMER</Text>
-          </View>
-          <Text style={styles.disclaimerText}>
-            "AI-generated information is for general guidance and preliminary triage only. It is not a medical diagnosis and does not replace consultation with a qualified dermatologist."
-          </Text>
         </View>
 
         {/* 3. PRE-CONSULTATION SUMMARY CARD */}
@@ -337,26 +387,27 @@ export default function PatientDetailScreen({ route, navigation }) {
             <View style={styles.contentCard}>
               <Text style={[styles.cardSectionTitle, { marginBottom: 14 }]}>Uploaded Skin Photo</Text>
               <View style={styles.skinPhotoWrapper}>
-                <Image
-                  source={{ uri: skinPhoto }}
-                  style={styles.skinPhotoImage}
-                  resizeMode="cover"
-                />
+                {skinPhoto && !imageError ? (
+                  <Image
+                    source={{ uri: skinPhoto }}
+                    style={styles.skinPhotoImage}
+                    resizeMode="cover"
+                    onError={(err) => {
+                      console.warn('[PatientDetailScreen] Image load error:', err?.nativeEvent?.error);
+                      setImageError(true);
+                    }}
+                  />
+                ) : (
+                  <View style={styles.noPhotoPlaceholder}>
+                    <Text style={styles.noPhotoEmoji}>📷</Text>
+                    <Text style={styles.noPhotoTitle}>No Skin Photo Uploaded</Text>
+                    <Text style={styles.noPhotoSubText}>
+                      No clinical skin photo was attached to this case file.
+                    </Text>
+                  </View>
+                )}
               </View>
 
-              {/* Preliminary AI Vision Findings Box */}
-              <View style={styles.aiFindingsBox}>
-                <View style={styles.aiFindingsHeader}>
-                  <Text style={styles.aiFindingsSparkle}>✨</Text>
-                  <Text style={styles.aiFindingsTitle}>Preliminary AI Vision Findings</Text>
-                </View>
-                <Text style={styles.aiFindingsSummary}>
-                  <Text style={styles.boldLabel}>Summary:</Text> {aiVision}
-                </Text>
-                <Text style={styles.aiFindingsModel}>
-                  <Text style={styles.boldLabel}>Model Version:</Text> EfficientNet-B0-Teledermatology-v1.2
-                </Text>
-              </View>
             </View>
           </View>
         </View>
@@ -742,6 +793,29 @@ const styles = StyleSheet.create({
   skinPhotoImage: {
     width: '100%',
     height: '100%',
+  },
+  noPhotoPlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    padding: 16,
+  },
+  noPhotoEmoji: {
+    fontSize: 40,
+    marginBottom: 8,
+  },
+  noPhotoTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#64748B',
+    marginBottom: 4,
+  },
+  noPhotoSubText: {
+    fontSize: 12,
+    color: '#94A3B8',
+    textAlign: 'center',
   },
 
   // AI Findings Box

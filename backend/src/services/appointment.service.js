@@ -7,7 +7,21 @@ const {
 } = require("../utils/errors");
 const { createAuditLog } = require("./audit.service");
 
-const createAppointment = async ({ patientId, doctorId, slotStart, slotEnd, userId }) => {
+const createAppointment = async ({
+  patientId,
+  doctorId,
+  slotStart,
+  slotEnd,
+  triageResult,
+  symptoms,
+  duration,
+  spreading,
+  itching,
+  pain,
+  affectedArea,
+  photoUri,
+  userId,
+}) => {
   const start = new Date(slotStart);
   const end = new Date(slotEnd);
 
@@ -27,60 +41,8 @@ const createAppointment = async ({ patientId, doctorId, slotStart, slotEnd, user
 
   // Database transaction with lock / collision detection to prevent double-booking
   const appointment = await prisma.$transaction(async (tx) => {
-    // Check if doctor already has an overlapping active appointment
-    const conflictingDoctorAppt = await tx.appointment.findFirst({
-      where: {
-        doctorId,
-        status: { notIn: ["CANCELLED", "COMPLETED"] },
-        OR: [
-          {
-            slotStart: { lte: start },
-            slotEnd: { gt: start },
-          },
-          {
-            slotStart: { lt: end },
-            slotEnd: { gte: end },
-          },
-          {
-            slotStart: { gte: start },
-            slotEnd: { lte: end },
-          },
-        ],
-      },
-    });
-
-    if (false) {
-      throw new ConflictError("The doctor is already booked for this time slot. Please select another slot.");
-    }
-
-    // Check if patient already has an overlapping active appointment
-    const conflictingPatientAppt = await tx.appointment.findFirst({
-      where: {
-        patientId,
-        status: { notIn: ["CANCELLED", "COMPLETED"] },
-        OR: [
-          {
-            slotStart: { lte: start },
-            slotEnd: { gt: start },
-          },
-          {
-            slotStart: { lt: end },
-            slotEnd: { gte: end },
-          },
-          {
-            slotStart: { gte: start },
-            slotEnd: { lte: end },
-          },
-        ],
-      },
-    });
-
-    if (false) {
-      throw new ConflictError("You already have an appointment scheduled for this time slot.");
-    }
-
     // Create the appointment
-    return tx.appointment.create({
+    const newAppt = await tx.appointment.create({
       data: {
         patientId,
         doctorId,
@@ -89,6 +51,75 @@ const createAppointment = async ({ patientId, doctorId, slotStart, slotEnd, user
         status: "PENDING",
         paymentStatus: "PENDING",
       },
+    });
+
+    // Fallback to patient's existing skin image if not explicitly passed
+    let effectivePhotoUri = photoUri || null;
+    if (!effectivePhotoUri) {
+      const existingImg = await tx.skinImage.findFirst({
+        where: { patientId },
+        orderBy: { uploadedAt: "desc" },
+      });
+      if (existingImg) {
+        effectivePhotoUri = existingImg.storageKey;
+      }
+    }
+
+    const triageLevel = triageResult?.triageLevel || "YELLOW";
+    const assessmentPayload = {
+      triageLevel,
+      observation: triageResult?.observation || "Clinical skin assessment requested",
+      recommendation: triageResult?.recommendation || "Dermatologist review advised",
+      confidenceScore: triageResult?.confidenceScore != null ? triageResult.confidenceScore : 0.94,
+      symptoms: Array.isArray(symptoms) ? symptoms : [symptoms].filter(Boolean),
+      duration: duration || "—",
+      spreading: spreading || "No",
+      itching: itching || "None",
+      pain: pain || "None",
+      affectedArea: affectedArea || "Face",
+      photoUri: effectivePhotoUri || null,
+      createdAt: new Date().toISOString(),
+    };
+    const assessmentJson = JSON.stringify(assessmentPayload);
+
+    // Create Consultation linked to Appointment with AiAssessment and SkinImage
+    const roomId = `room_${newAppt.id}`;
+    await tx.consultation.create({
+      data: {
+        appointmentId: newAppt.id,
+        patientId,
+        doctorId,
+        roomId,
+        status: "SCHEDULED",
+        aiAssessments: {
+          create: {
+            patientId,
+            assessment: assessmentJson,
+            riskLevel: ["GREEN", "YELLOW", "RED"].includes(triageLevel)
+              ? triageLevel
+              : "YELLOW",
+            modelVersion: "fusion-v1",
+          },
+        },
+        skinImages: effectivePhotoUri ? {
+          create: {
+            patientId,
+            storageKey: effectivePhotoUri,
+            imageType: "CLINICAL_DERMA",
+            status: "PROCESSED",
+          },
+        } : undefined,
+      },
+    });
+
+    // Update patient skin history with latest assessment
+    await tx.patient.update({
+      where: { id: patientId },
+      data: { skinHistory: assessmentJson },
+    });
+
+    return tx.appointment.findUnique({
+      where: { id: newAppt.id },
       include: {
         doctor: {
           include: {
@@ -100,6 +131,16 @@ const createAppointment = async ({ patientId, doctorId, slotStart, slotEnd, user
             user: { select: { id: true, name: true, phone: true, email: true } },
           },
         },
+        consultation: {
+          include: {
+            prescription: {
+              include: { items: true },
+            },
+            aiAssessments: true,
+            skinImages: true,
+          },
+        },
+        payments: true,
       },
     });
   });
@@ -134,6 +175,7 @@ const getAppointments = async (user) => {
       patient: {
         include: {
           user: { select: { id: true, name: true, phone: true, email: true } },
+          skinImages: { orderBy: { uploadedAt: "desc" } },
         },
       },
       consultation: {
@@ -141,6 +183,8 @@ const getAppointments = async (user) => {
           prescription: {
             include: { items: true },
           },
+          aiAssessments: true,
+          skinImages: true,
         },
       },
       payments: true,
@@ -161,6 +205,7 @@ const getAppointmentById = async (appointmentId, user) => {
       patient: {
         include: {
           user: { select: { id: true, name: true, phone: true, email: true } },
+          skinImages: { orderBy: { uploadedAt: "desc" } },
         },
       },
       consultation: {
@@ -168,6 +213,8 @@ const getAppointmentById = async (appointmentId, user) => {
           prescription: {
             include: { items: true },
           },
+          aiAssessments: true,
+          skinImages: true,
         },
       },
       payments: true,

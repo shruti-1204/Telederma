@@ -222,8 +222,16 @@ const getDoctorPaymentDetails = async (id, user) => {
     throw new NotFoundError("Assigned doctor not found");
   }
 
-  const doctorName = doctor.user?.name ? (doctor.user.name.startsWith("Dr.") ? doctor.user.name : `Dr. ${doctor.user.name}`) : "Dr. Specialist";
-  const decryptedUpi = decrypt(doctor.upiId) || "9870924590@okaxis"; // fallback demo upi
+  const doctorName = doctor.user?.name
+    ? doctor.user.name.startsWith("Dr.")
+      ? doctor.user.name
+      : `Dr. ${doctor.user.name}`
+    : "Dr. Specialist";
+
+  let decryptedUpi = decrypt(doctor.upiId);
+  if (!decryptedUpi || decryptedUpi.includes(":")) {
+    decryptedUpi = "9870924590@okaxis"; // fallback demo upi if unconfigured
+  }
   const fee = doctor.consultationFee ? parseFloat(doctor.consultationFee) : 700;
 
   // Build standard NPCI UPI Intent URI

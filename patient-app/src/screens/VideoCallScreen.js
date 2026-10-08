@@ -432,7 +432,7 @@ export default function VideoCallScreen({ navigation, route }) {
               {/* Doctor's UPI ID with Copy Button */}
               <View style={styles.upiIdCard}>
                 <View style={{ flex: 1, marginRight: 8 }}>
-                  <Text style={styles.upiLabel}>🆔 Doctor's UPI ID (Encrypted in DB)</Text>
+                  <Text style={styles.upiLabel}>🆔 Doctor's UPI ID</Text>
                   <Text style={styles.upiValue}>{upi}</Text>
                 </View>
                 <TouchableOpacity style={styles.copyBtn} onPress={handleCopyUpi} activeOpacity={0.7}>

@@ -2,20 +2,8 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Colors } from '../theme/colors';
 
-export default function MedicalDisclaimer({ compact = false }) {
-  return (
-    <View style={[styles.container, compact && styles.compactContainer]}>
-      <View style={styles.iconCol}>
-        <Text style={styles.icon}>🛡️</Text>
-      </View>
-      <View style={styles.textCol}>
-        <Text style={styles.title}>IMPORTANT MEDICAL DISCLAIMER</Text>
-        <Text style={styles.message}>
-          "AI-generated information is for general guidance and preliminary triage only. It is not a medical diagnosis and does not replace consultation with a qualified dermatologist."
-        </Text>
-      </View>
-    </View>
-  );
+export default function MedicalDisclaimer() {
+  return null;
 }
 
 const styles = StyleSheet.create({

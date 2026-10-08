@@ -93,8 +93,8 @@ class AiService {
 
       if (response.ok) {
         const data = await response.json();
-        // Ensure riskLevel is strictly GREEN, YELLOW, or RED
-        const validRisk = ["GREEN", "YELLOW", "RED"].includes(data.riskLevel) ? data.riskLevel : "YELLOW";
+        // Ensure riskLevel is valid (YELLOW, ORANGE, RED, or legacy GREEN)
+        const validRisk = ["GREEN", "YELLOW", "ORANGE", "RED"].includes(data.riskLevel) ? data.riskLevel : "YELLOW";
         return {
           ...data,
           riskLevel: validRisk,
@@ -128,7 +128,7 @@ class AiService {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message, history }),
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(25000),
       });
 
       if (response.ok) {
@@ -141,6 +141,7 @@ class AiService {
     return {
       reply: "Thank you for your question. As your TeleDerma AI Skin Assistant, I provide educational guidance on skincare ingredients and common skin conditions. For personal diagnosis or medical prescriptions, please start a consultation with our verified dermatologists.",
       disclaimer: "General information only, not medical advice.",
+      suggestions: ["Why is my skin becoming dry?", "How to treat acne breakouts?", "Start Doctor Consultation ➔"],
     };
   }
 }

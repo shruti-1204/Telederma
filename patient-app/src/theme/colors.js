@@ -38,6 +38,8 @@ export const Colors = {
   triageGreenBg: '#DCFCE7',
   triageYellow: '#D97706',
   triageYellowBg: '#FEF3C7',
+  triageOrange: '#EA580C',
+  triageOrangeBg: '#FFEDD5',
   triageRed: '#DC2626',
   triageRedBg: '#FEE2E2',
 

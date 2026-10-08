@@ -151,38 +151,86 @@ export const aiService = {
   },
 
   // Perform AI Triage on combined payload
-  performTriage: async ({ symptoms = [], duration = '', severity = 'Moderate', affectedArea = 'Face' }) => {
-    await new Promise(resolve => setTimeout(resolve, 800));
+  performTriage: async ({
+    symptoms = [],
+    duration = '',
+    severity = 'None',
+    spreading = 'No',
+    itching = 'None',
+    pain = 'None',
+    affectedArea = 'Face (Cheeks / T-Zone)',
+  }) => {
+    await new Promise((resolve) => setTimeout(resolve, 800));
 
-    const isUrgent = symptoms.includes('Bleeding') || symptoms.includes('Severe Pain') || severity === 'Severe';
-    const isModerate = symptoms.includes('Itching') || symptoms.includes('Burning') || symptoms.includes('Pustules') || severity === 'Moderate';
+    const isUrgent =
+      symptoms.some((s) => s.toLowerCase().includes('bleeding')) ||
+      severity === 'Severe' ||
+      spreading === 'Rapidly';
 
-    let triageLevel = 'GREEN';
-    let observation = 'Mild localized inflammatory reaction. Epidermal barrier irritation.';
-    let recommendation = 'Dermatologist consultation recommended for standard topical care.';
+    const isModerate =
+      severity === 'Moderate' ||
+      spreading === 'Slowly' ||
+      symptoms.some((s) => s.toLowerCase().includes('moderate'));
+
+    const isAsymptomatic =
+      severity === 'None' ||
+      (itching === 'None' && pain === 'None' && spreading === 'No');
 
     if (isUrgent) {
-      triageLevel = 'RED';
-      observation = 'Prominent inflammatory signs detected with reported pain/bleeding indicators.';
-      recommendation = 'Prompt dermatologist evaluation recommended within 24-48 hours.';
-    } else if (isModerate) {
-      triageLevel = 'YELLOW';
-      observation = 'Moderate erythematous acneiform papules and surface pustules identified.';
-      recommendation = 'Dermatologist evaluation recommended for tailored medical prescription.';
+      return {
+        triageLevel: 'RED',
+        observation: 'Prominent acute inflammatory signs, severe discomfort, or rapid lesion progression detected.',
+        recommendation: 'Prompt clinical evaluation recommended within 24-48 hours.',
+        confidenceScore: 0.92,
+        analyzedDate: new Date().toISOString(),
+        affectedArea,
+        detectedFeatures: [
+          'Acute erythema and swelling',
+          'Reported severe pain or active lesion expansion',
+        ],
+        disclaimer: 'AI-generated information is for general guidance and preliminary triage only. It is not a medical diagnosis and does not replace consultation with a qualified dermatologist.',
+      };
     }
 
+    if (isModerate) {
+      return {
+        triageLevel: 'ORANGE',
+        observation: 'Moderate erythematous acneiform papules and active epidermal irritation identified.',
+        recommendation: 'Dermatologist evaluation recommended for tailored medical prescription.',
+        confidenceScore: 0.88,
+        analyzedDate: new Date().toISOString(),
+        affectedArea,
+        detectedFeatures: [
+          'Circumscribed erythema',
+          'Follicular prominence',
+          'Active superficial irritation',
+        ],
+        disclaimer: 'AI-generated information is for general guidance and preliminary triage only. It is not a medical diagnosis and does not replace consultation with a qualified dermatologist.',
+      };
+    }
+
+    // Routine / Mild / Asymptomatic (Freckles / Benign pigmentation / Quiescent skin) -> YELLOW
     return {
-      triageLevel,
-      observation,
-      recommendation,
-      confidenceScore: 0.89,
+      triageLevel: 'YELLOW',
+      observation: isAsymptomatic
+        ? 'Asymptomatic epidermal presentation without active erythema, acute inflammation, or rapid spreading. Findings are consistent with benign superficial pigmentation (e.g., freckles / ephelides) or stable quiescent skin.'
+        : 'Mild, localized superficial skin irritation without acute spreading or severe inflammatory features.',
+      recommendation: isAsymptomatic
+        ? 'No urgent clinical intervention needed. Routine skin care, daily broad-spectrum sun protection (SPF 30+), and regular observation advised. Elective dermatologist consultation available for aesthetic or preventive evaluation.'
+        : 'Routine skin care and standard barrier moisturizing advised. Consult a dermatologist if irritation persists.',
+      confidenceScore: 0.94,
       analyzedDate: new Date().toISOString(),
       affectedArea,
-      detectedFeatures: [
-        'Circumscribed erythema',
-        'Follicular prominence',
-        'Sebaceous dysregulation',
-      ],
+      detectedFeatures: isAsymptomatic
+        ? [
+            'Uniform superficial pigmentation (Ephelides / Freckles)',
+            'Intact epidermal barrier',
+            'No active papules, pustules, or erythema',
+          ]
+        : [
+            'Mild superficial erythema',
+            'Stable localized margins',
+          ],
       disclaimer: 'AI-generated information is for general guidance and preliminary triage only. It is not a medical diagnosis and does not replace consultation with a qualified dermatologist.',
     };
   },
@@ -197,31 +245,35 @@ export const aiService = {
           content: h.text,
         }));
 
-      const response = await api.post('/ai/chat', {
-        message: question,
-        history: formattedHistory,
-      });
+      const response = await api.post(
+        '/ai/chat',
+        {
+          message: question,
+          history: formattedHistory,
+        },
+        { timeout: 30000 }
+      );
 
       if (response.data?.data) {
-        const { reply, disclaimer } = response.data.data;
+        const { reply, disclaimer, suggestions: serverSuggestions } = response.data.data;
 
-        // Contextual suggestion chips
-        const lower = question.toLowerCase();
-        let suggestions = ['Start Consultation', 'Book Dermatologist', 'Check Image Quality'];
+        // Contextual suggestion chips fallback if server didn't supply them
+        const lower = (question + ' ' + (reply || '')).toLowerCase();
+        let fallbackSuggestions = ['Start Doctor Consultation ➔', 'Why is my skin becoming dry?', 'How to treat acne breakouts?'];
         if (lower.includes('acne') || lower.includes('pimple') || lower.includes('breakout')) {
-          suggestions = ['Adapalene vs Benzoyl Peroxide', 'Start Consultation', 'Sunscreen for acne'];
+          fallbackSuggestions = ['Adapalene vs Benzoyl Peroxide', 'How to prevent acne scars?', 'Start Doctor Consultation ➔'];
         } else if (lower.includes('dry') || lower.includes('flak') || lower.includes('barrier')) {
-          suggestions = ['How to repair skin barrier?', 'Best moisturizers', 'Book Dermatologist'];
+          fallbackSuggestions = ['How to repair skin barrier?', 'Ceramides vs Hyaluronic Acid', 'Start Doctor Consultation ➔'];
         } else if (lower.includes('rash') || lower.includes('itch') || lower.includes('eczema')) {
-          suggestions = ['Eczema trigger factors', 'Start Consultation', 'Soothing ingredients'];
+          fallbackSuggestions = ['Common eczema triggers', 'Safe moisturizers for sensitive skin', 'Start Doctor Consultation ➔'];
         } else if (lower.includes('triage') || lower.includes('risk')) {
-          suggestions = ['Explain GREEN triage', 'Explain RED triage', 'Start Consultation'];
+          fallbackSuggestions = ['Explain YELLOW vs ORANGE triage', 'When should I go to hospital?', 'Start Doctor Consultation ➔'];
         }
 
         return {
           reply: reply || 'Here is educational guidance from your TeleDerma Assistant.',
-          disclaimer: disclaimer || 'General information only, not medical advice.',
-          suggestions,
+          disclaimer: disclaimer || 'AI-generated information is for general educational guidance only. It is not a medical diagnosis and does not replace consultation with a qualified dermatologist.',
+          suggestions: (serverSuggestions && serverSuggestions.length > 0) ? serverSuggestions : fallbackSuggestions,
         };
       }
     } catch (err) {

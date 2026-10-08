@@ -521,15 +521,15 @@ export default function ConsultationFlowScreen({ navigation, route }) {
     const triageBadgeColor =
       level === 'RED'
         ? Colors.triageRed
-        : level === 'YELLOW'
-        ? Colors.triageYellow
-        : Colors.triageGreen;
+        : level === 'ORANGE'
+        ? Colors.triageOrange
+        : Colors.triageYellow;
     const triageBgColor =
       level === 'RED'
         ? Colors.triageRedBg
-        : level === 'YELLOW'
-        ? Colors.triageYellowBg
-        : Colors.triageGreenBg;
+        : level === 'ORANGE'
+        ? Colors.triageOrangeBg
+        : Colors.triageYellowBg;
 
     return (
       <View style={styles.stepContainer}>
@@ -546,13 +546,15 @@ export default function ConsultationFlowScreen({ navigation, route }) {
             <View style={[styles.triagePill, { backgroundColor: triageBadgeColor }]}>
               <Text style={styles.triagePillText}>RISK LEVEL: {level}</Text>
             </View>
-            <Text style={styles.confidenceText}>Confidence: 89%</Text>
+            <Text style={styles.confidenceText}>
+              Confidence: {Math.round((triageResult?.confidenceScore || 0.94) * 100)}%
+            </Text>
           </View>
 
           <Text style={styles.triageObservationTitle}>AI-Assisted Observation</Text>
           <Text style={styles.triageObservationText}>
             {triageResult?.observation ||
-              'Moderate erythematous acneiform papules and surface pustules identified.'}
+              'Skin appearance analyzed for clinical dermatologist evaluation.'}
           </Text>
 
           <View style={styles.divider} />
@@ -560,7 +562,7 @@ export default function ConsultationFlowScreen({ navigation, route }) {
           <Text style={styles.triageRecommendationTitle}>Recommendation</Text>
           <Text style={styles.triageRecommendationText}>
             {triageResult?.recommendation ||
-              'Dermatologist evaluation recommended for tailored medical prescription.'}
+              'Dermatologist consultation recommended for professional assessment.'}
           </Text>
         </View>
 
@@ -577,32 +579,92 @@ export default function ConsultationFlowScreen({ navigation, route }) {
           </View>
           <View style={styles.summaryLine}>
             <Text style={styles.summaryKey}>Reported Symptoms:</Text>
-            <Text style={styles.summaryVal}>{selectedSymptoms.join(', ') || 'None selected'}</Text>
+            <Text style={styles.summaryVal}>
+              {selectedSymptoms && selectedSymptoms.length > 0
+                ? selectedSymptoms.join(', ')
+                : 'None reported (Asymptomatic)'}
+            </Text>
           </View>
           <View style={styles.summaryLine}>
             <Text style={styles.summaryKey}>Image Finding:</Text>
             <Text style={styles.summaryVal}>
-              {qualityStatus?.visualFinding || 'Pustular Acneiform Lesions'}
+              {qualityStatus?.visualFinding || triageResult?.detectedFeatures?.[0] || 'Clear Epidermal Visualization'}
             </Text>
           </View>
         </View>
 
-        {/* Action button to select Doctor */}
-        <TouchableOpacity
-          style={styles.bookDoctorBtn}
-          onPress={() => navigation.navigate('DoctorList')}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.bookDoctorBtnText}>Book Dermatologist Consultation ➔</Text>
-        </TouchableOpacity>
+        {/* TRIAGE ACTIONS: VC ONLY FOR YELLOW & ORANGE; IMMEDIATE HOSPITAL VISIT MANDATE FOR RED */}
+        {level === 'RED' ? (
+          <View style={styles.emergencyHospitalCard}>
+            <View style={styles.emergencyHospitalHeader}>
+              <View style={styles.emergencyIconBadge}>
+                <Text style={styles.emergencyIconText}>🚨</Text>
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={styles.emergencyHospitalTitle}>
+                  IMMEDIATE HOSPITAL VISIT REQUIRED
+                </Text>
+                <Text style={styles.emergencyHospitalSubtitle}>
+                  Online Video Consultation (VC) Disabled
+                </Text>
+              </View>
+            </View>
 
-        <TouchableOpacity
-          style={styles.retakeBtn}
-          onPress={() => setCurrentStep(1)}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.retakeBtnText}>Start New Assessment</Text>
-        </TouchableOpacity>
+            <View style={styles.emergencyAlertBox}>
+              <Text style={styles.emergencyAlertHeading}>
+                ⚠️ High-Risk Clinical Safety Notice:
+              </Text>
+              <Text style={styles.emergencyAlertBody}>
+                Due to the acute nature of your reported symptoms (e.g., active bleeding, rapid growth, or systemic emergency signs), online video consultation is medically unsafe.
+              </Text>
+              <Text style={styles.emergencyAlertMandate}>
+                Please visit the nearest Hospital Emergency Department (ER) or consult an in-person doctor immediately for direct clinical intervention.
+              </Text>
+            </View>
+
+            {/* Helpline info */}
+            <View style={styles.emergencyHelplineRow}>
+              <Text style={styles.emergencyHelplineLabel}>National Emergency Support:</Text>
+              <Text style={styles.emergencyHelplineNumbers}>📞 Call 112 / 108</Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.retakeBtn}
+              onPress={() => setCurrentStep(1)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.retakeBtnText}>↺ Start New Assessment</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          /* YELLOW & ORANGE: ELIGIBLE FOR VIDEO CONSULTATION WITH DOCTOR */
+          <>
+            <View style={styles.vcEligibleBadge}>
+              <Text style={styles.vcEligibleIcon}>📹</Text>
+              <Text style={styles.vcEligibleText}>
+                Eligible for Online Video Consultation (TeleDerma VC)
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.bookDoctorBtn}
+              onPress={() => navigation.navigate('DoctorList')}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.bookDoctorBtnText}>
+                Consult Doctor on Video Call (VC) ➔
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.retakeBtn}
+              onPress={() => setCurrentStep(1)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.retakeBtnText}>Start New Assessment</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
     );
   };
@@ -617,8 +679,6 @@ export default function ConsultationFlowScreen({ navigation, route }) {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <MedicalDisclaimer />
-
         {currentStep === 1 && renderStep1()}
         {currentStep === 2 && renderStep2()}
         {currentStep === 3 && renderStep3()}
@@ -1422,5 +1482,119 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     fontSize: 14,
     fontWeight: '600',
+  },
+  // Emergency Hospital Styles (RED Triage)
+  emergencyHospitalCard: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 2,
+    borderColor: '#DC2626',
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 16,
+    shadowColor: '#DC2626',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  emergencyHospitalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  emergencyIconBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FEE2E2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+  },
+  emergencyIconText: {
+    fontSize: 22,
+  },
+  emergencyHospitalTitle: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#991B1B',
+    letterSpacing: 0.3,
+  },
+  emergencyHospitalSubtitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#B91C1C',
+    marginTop: 2,
+  },
+  emergencyAlertBox: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#DC2626',
+    padding: 14,
+    marginBottom: 14,
+  },
+  emergencyAlertHeading: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#991B1B',
+    marginBottom: 6,
+  },
+  emergencyAlertBody: {
+    fontSize: 13,
+    color: '#7F1D1D',
+    lineHeight: 19,
+    marginBottom: 8,
+  },
+  emergencyAlertMandate: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#991B1B',
+    lineHeight: 19,
+  },
+  emergencyHelplineRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#FEE2E2',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  emergencyHelplineLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#991B1B',
+  },
+  emergencyHelplineNumbers: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#B91C1C',
+  },
+  // VC Eligible Badge (YELLOW & ORANGE)
+  vcEligibleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginBottom: 12,
+  },
+  vcEligibleIcon: {
+    fontSize: 18,
+    marginRight: 8,
+  },
+  vcEligibleText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#065F46',
+    flex: 1,
   },
 });

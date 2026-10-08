@@ -1,4 +1,5 @@
-import React, { createContext, useState } from 'react';
+import React, { createContext, useState, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { aiQualityPresets, aiService } from '../services/aiService';
 
 export const ConsultationContext = createContext();
@@ -13,6 +14,15 @@ export const ConsultationProvider = ({ children }) => {
   const [photoFile, setPhotoFile] = useState(null);
   const [qualityStatus, setQualityStatus] = useState(null);
   const [isCheckingQuality, setIsCheckingQuality] = useState(false);
+
+  // Restore persisted photo if available
+  useEffect(() => {
+    AsyncStorage.getItem('@telederma_last_uploaded_photo').then((saved) => {
+      if (saved && !photoUri) {
+        setPhotoUri(saved);
+      }
+    }).catch(() => {});
+  }, []);
 
   // Symptoms Questionnaire matching Image 1
   const [duration, setDuration] = useState('1–2 weeks');
@@ -47,6 +57,7 @@ export const ConsultationProvider = ({ children }) => {
     setPhotoUri(photoData.uri);
     setPhotoFile(photoData);
     setPhotoPreset(null);
+    AsyncStorage.setItem('@telederma_last_uploaded_photo', photoData.uri).catch(() => {});
     setIsCheckingQuality(true);
     const result = await aiService.analyzeUploadedPhoto(photoData);
     setQualityStatus(result);
@@ -60,6 +71,7 @@ export const ConsultationProvider = ({ children }) => {
     setPhotoPreset(preset);
     setPhotoUri(preset.sampleImageUri);
     setPhotoFile(null);
+    AsyncStorage.setItem('@telederma_last_uploaded_photo', preset.sampleImageUri).catch(() => {});
     const result = await aiService.checkImageQuality(presetKey);
     setQualityStatus(result);
     setIsCheckingQuality(false);
@@ -71,6 +83,7 @@ export const ConsultationProvider = ({ children }) => {
     setQualityStatus(null);
     setPhotoPreset(null);
     setIsCheckingQuality(false);
+    AsyncStorage.removeItem('@telederma_last_uploaded_photo').catch(() => {});
   };
 
   // Run AI Triage
@@ -81,10 +94,23 @@ export const ConsultationProvider = ({ children }) => {
       emergencySymptoms.swellingThroat ||
       emergencySymptoms.highFever;
 
+    const hasSevere = itching === 'Severe' || pain === 'Severe' || spreading === 'Rapidly';
+    const hasModerate = itching === 'Moderate' || pain === 'Moderate' || spreading === 'Slowly';
+    const hasMild = itching === 'Mild' || pain === 'Mild';
+    const calculatedSeverity = hasSevere ? 'Severe' : hasModerate ? 'Moderate' : hasMild ? 'Mild' : 'None';
+
+    const questionnaireSymptoms = [];
+    if (itching && itching !== 'None') questionnaireSymptoms.push(`Itching: ${itching}`);
+    if (pain && pain !== 'None') questionnaireSymptoms.push(`Pain: ${pain}`);
+    if (spreading && spreading !== 'No') questionnaireSymptoms.push(`Spreading: ${spreading}`);
+
     let result = await aiService.performTriage({
-      symptoms: selectedSymptoms,
+      symptoms: questionnaireSymptoms,
       duration,
-      severity: itching === 'Severe' || pain === 'Severe' ? 'Severe' : 'Moderate',
+      severity: calculatedSeverity,
+      spreading,
+      itching,
+      pain,
       affectedArea,
     });
 
@@ -97,6 +123,7 @@ export const ConsultationProvider = ({ children }) => {
       };
     }
 
+    setSelectedSymptoms(questionnaireSymptoms.length > 0 ? questionnaireSymptoms : ['None (Asymptomatic)']);
     setTriageResult(result);
     setIsTriaging(false);
     setCurrentStep(3);

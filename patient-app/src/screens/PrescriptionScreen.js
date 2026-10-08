@@ -349,9 +349,7 @@ export default function PrescriptionScreen({ navigation, route }) {
            <Text style={{ marginTop: 10, color: Colors.text }}>Fetching latest prescription...</Text>
         </View>
       ) : (
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <MedicalDisclaimer />
-
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Doctor & Patient Info Header */}
         <View style={styles.rxHeaderCard}>
           <Text style={styles.clinicTitle}>Telederma Digital Rx</Text>

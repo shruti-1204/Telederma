@@ -14,6 +14,14 @@ const createAppointment = async (req, res, next) => {
       doctorId: req.body.doctorId,
       slotStart: req.body.slotStart,
       slotEnd: req.body.slotEnd,
+      triageResult: req.body.triageResult,
+      symptoms: req.body.symptoms,
+      duration: req.body.duration,
+      spreading: req.body.spreading,
+      itching: req.body.itching,
+      pain: req.body.pain,
+      affectedArea: req.body.affectedArea,
+      photoUri: req.body.photoUri,
       userId: req.user.userId,
     });
 

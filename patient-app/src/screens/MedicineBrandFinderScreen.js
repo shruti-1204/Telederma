@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,14 +10,44 @@ import {
 } from 'react-native';
 import { Colors } from '../theme/colors';
 import Header from '../components/Header';
-import MedicalDisclaimer from '../components/MedicalDisclaimer';
 import { mockMedicineCatalog } from '../services/mockData';
+import medicineService from '../services/medicineService';
 
 export default function MedicineBrandFinderScreen({ navigation }) {
+  const [catalog, setCatalog] = useState(mockMedicineCatalog);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMedId, setSelectedMedId] = useState(
     mockMedicineCatalog[0]?.id || 'med-1'
   );
+  const [searchResults, setSearchResults] = useState(null);
+  const [dynamicAlternatives, setDynamicAlternatives] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+
+  // Fetch suggested molecules from Medicine Alternative Finder API on mount
+  useEffect(() => {
+    let isMounted = true;
+    const fetchMolecules = async () => {
+      try {
+        setIsLoading(true);
+        const data = await medicineService.getMolecules();
+        if (isMounted && Array.isArray(data) && data.length > 0) {
+          setCatalog(data);
+          if (!selectedMedId || !data.some((m) => m.id === selectedMedId)) {
+            setSelectedMedId(data[0].id);
+          }
+        }
+      } catch (err) {
+        console.warn('[MedicineBrandFinder] Error loading molecules:', err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+    fetchMolecules();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const trimmedQuery = searchQuery.trim().toLowerCase();
 
@@ -25,15 +55,50 @@ export default function MedicineBrandFinderScreen({ navigation }) {
   const cleanStr = (str) =>
     (str || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
 
-  // Filter medicines based on exact or partial matches
-  const filteredMeds = useMemo(() => {
-    if (!trimmedQuery) return mockMedicineCatalog;
+  // Debounced server search to query Medicine Alternative Finder dynamically
+  useEffect(() => {
+    let isMounted = true;
+    const trimmed = searchQuery.trim();
+    if (!trimmed) {
+      setSearchResults(null);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        setIsSearching(true);
+        const serverResults = await medicineService.searchMedicines(trimmed);
+        if (isMounted && Array.isArray(serverResults)) {
+          setSearchResults(serverResults);
+          if (
+            serverResults.length > 0 &&
+            !serverResults.some((m) => m.id === selectedMedId)
+          ) {
+            setSelectedMedId(serverResults[0].id);
+          }
+        }
+      } catch (err) {
+        console.warn('[MedicineBrandFinder] Server search error:', err);
+      } finally {
+        if (isMounted) setIsSearching(false);
+      }
+    }, 250);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [searchQuery]);
+
+  // Synchronous client filter for instant 0ms typing feedback
+  const localFiltered = useMemo(() => {
+    if (!trimmedQuery) return catalog;
 
     const cleanedQuery = cleanStr(trimmedQuery);
     const queryTokens = cleanedQuery.split(/\s+/).filter(Boolean);
 
-    return mockMedicineCatalog.filter((med) => {
-      const activeLower = med.activeIngredient.toLowerCase();
+    return catalog.filter((med) => {
+      const activeLower = (med.activeIngredient || '').toLowerCase();
       const cleanedActive = cleanStr(med.activeIngredient);
       const categoryLower = (med.category || '').toLowerCase();
       const indicationLower = (med.indication || '').toLowerCase();
@@ -56,17 +121,19 @@ export default function MedicineBrandFinderScreen({ navigation }) {
         return true;
       }
 
-      // 3. Match on any brand name or form (e.g. "Adaferin", "Cleargel", "Nizral", "Gel")
+      // 3. Match on any brand name, formulation, or manufacturer
       if (
         med.brands &&
         med.brands.some((b) => {
-          const brandLower = b.name.toLowerCase();
+          const brandLower = (b.name || '').toLowerCase();
           const cleanedBrand = cleanStr(b.name);
           const formLower = (b.form || '').toLowerCase();
+          const mfgLower = (b.manufacturer || '').toLowerCase();
           return (
             brandLower.includes(trimmedQuery) ||
             cleanedBrand.includes(cleanedQuery) ||
-            formLower.includes(trimmedQuery)
+            formLower.includes(trimmedQuery) ||
+            mfgLower.includes(trimmedQuery)
           );
         })
       ) {
@@ -81,7 +148,11 @@ export default function MedicineBrandFinderScreen({ navigation }) {
             categoryLower.includes(token) ||
             indicationLower.includes(token) ||
             (med.brands &&
-              med.brands.some((b) => cleanStr(b.name).includes(token)))
+              med.brands.some(
+                (b) =>
+                  cleanStr(b.name).includes(token) ||
+                  (b.manufacturer || '').toLowerCase().includes(token)
+              ))
           );
         });
         if (matchesAll) return true;
@@ -89,7 +160,14 @@ export default function MedicineBrandFinderScreen({ navigation }) {
 
       return false;
     });
-  }, [trimmedQuery]);
+  }, [trimmedQuery, catalog]);
+
+  // Combined results (using server results if returned, local filter immediately)
+  const filteredMeds = useMemo(() => {
+    if (!trimmedQuery) return catalog;
+    if (searchResults !== null) return searchResults;
+    return localFiltered;
+  }, [trimmedQuery, catalog, searchResults, localFiltered]);
 
   // Derive the active medicine to display
   const selectedMed = useMemo(() => {
@@ -98,12 +176,51 @@ export default function MedicineBrandFinderScreen({ navigation }) {
     return found || filteredMeds[0];
   }, [filteredMeds, selectedMedId]);
 
+  // Dynamically load exact composition alternatives when selectedMed changes
+  useEffect(() => {
+    let isMounted = true;
+    if (!selectedMed?.id) {
+      setDynamicAlternatives(null);
+      return;
+    }
+
+    const loadAlternatives = async () => {
+      try {
+        const altData = await medicineService.getAlternatives(selectedMed.id);
+        if (isMounted && altData?.alternatives && altData.alternatives.length > 0) {
+          setDynamicAlternatives(altData.alternatives);
+        } else if (isMounted) {
+          setDynamicAlternatives(null);
+        }
+      } catch (err) {
+        if (isMounted) setDynamicAlternatives(null);
+      }
+    };
+    loadAlternatives();
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedMed?.id]);
+
+  // Derive available brands list (dynamic alternatives or catalog brands)
+  const displayBrands = useMemo(() => {
+    if (dynamicAlternatives && dynamicAlternatives.length > 0) {
+      return dynamicAlternatives;
+    }
+    return selectedMed?.brands || [];
+  }, [dynamicAlternatives, selectedMed]);
+
   // Check if a brand row matches the search query to highlight it
   const isBrandMatch = (brand) => {
     if (!trimmedQuery) return false;
-    const bName = brand.name.toLowerCase();
+    const bName = (brand.name || '').toLowerCase();
     const bForm = (brand.form || '').toLowerCase();
-    return bName.includes(trimmedQuery) || bForm.includes(trimmedQuery);
+    const bMfg = (brand.manufacturer || '').toLowerCase();
+    return (
+      bName.includes(trimmedQuery) ||
+      bForm.includes(trimmedQuery) ||
+      bMfg.includes(trimmedQuery)
+    );
   };
 
   return (
@@ -127,8 +244,6 @@ export default function MedicineBrandFinderScreen({ navigation }) {
             </Text>
           </View>
         </View>
-
-        <MedicalDisclaimer compact={true} />
 
         {/* Search Bar */}
         <View style={styles.searchBox}>
@@ -301,41 +416,43 @@ export default function MedicineBrandFinderScreen({ navigation }) {
                 Available Brands & Formulations in Pharmacy
               </Text>
               <Text style={styles.brandsCountBadge}>
-                {selectedMed.brands?.length || 0} Brands
+                {displayBrands.length} Brands
               </Text>
             </View>
 
-            {selectedMed.brands &&
-              selectedMed.brands.map((brand, idx) => {
-                const matched = isBrandMatch(brand);
-                return (
-                  <View
-                    key={idx}
-                    style={[
-                      styles.brandRowCard,
-                      matched && styles.brandRowCardMatched,
-                    ]}
-                  >
-                    <View style={styles.brandInfoCol}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <Text style={styles.brandName}>{brand.name}</Text>
-                        {matched && (
-                          <View style={styles.matchBadge}>
-                            <Text style={styles.matchBadgeText}>✓ Match</Text>
-                          </View>
-                        )}
-                      </View>
-                      <Text style={styles.brandDetails}>
-                        Form: {brand.form} • Pack: {brand.size}
-                      </Text>
+            {displayBrands.map((brand, idx) => {
+              const matched = isBrandMatch(brand);
+              return (
+                <View
+                  key={brand.id || idx}
+                  style={[
+                    styles.brandRowCard,
+                    matched && styles.brandRowCardMatched,
+                  ]}
+                >
+                  <View style={styles.brandInfoCol}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={styles.brandName}>{brand.name}</Text>
+                      {matched && (
+                        <View style={styles.matchBadge}>
+                          <Text style={styles.matchBadgeText}>✓ Match</Text>
+                        </View>
+                      )}
                     </View>
-                    <View style={styles.priceCol}>
-                      <Text style={styles.priceAmount}>₹{brand.price}</Text>
-                      <Text style={styles.priceMuted}>MRP (incl. taxes)</Text>
-                    </View>
+                    <Text style={styles.brandDetails}>
+                      Form: {brand.form} • Pack: {brand.size}
+                      {brand.manufacturer && !brand.name.toLowerCase().includes(brand.manufacturer.toLowerCase())
+                        ? ` • ${brand.manufacturer}`
+                        : ''}
+                    </Text>
                   </View>
-                );
-              })}
+                  <View style={styles.priceCol}>
+                    <Text style={styles.priceAmount}>₹{brand.price}</Text>
+                    <Text style={styles.priceMuted}>MRP (incl. taxes)</Text>
+                  </View>
+                </View>
+              );
+            })}
 
             {/* Informational Guidance */}
             <View style={styles.infoAlert}>

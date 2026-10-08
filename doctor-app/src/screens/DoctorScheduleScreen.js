@@ -114,14 +114,22 @@ export default function DoctorScheduleScreen({ navigation }) {
 
       // Sync with backend doctor profile
       const slotsString = updatedSlots.join(', ');
+      let backendSuccess = false;
+
       try {
-        await api.put('/doctors/me', {
+        const res = await api.put('/doctors/me', {
           availableSlots: slotsString,
         });
+        if (res.status >= 200 && res.status < 300) {
+          backendSuccess = true;
+        }
       } catch (apiErr) {
-        // Fallback endpoint if available
+        console.warn('Sync schedule API error:', apiErr.response?.data || apiErr.message);
         try {
-          await api.put('/doctors/profile', { availableSlots: slotsString });
+          const fallbackRes = await api.put('/doctors/profile', { availableSlots: slotsString });
+          if (fallbackRes.status >= 200 && fallbackRes.status < 300) {
+            backendSuccess = true;
+          }
         } catch (_) {}
       }
 
@@ -135,8 +143,12 @@ export default function DoctorScheduleScreen({ navigation }) {
         }
       } catch (_) {}
 
-      setStatusMessage('✓ Schedule saved successfully');
-      setTimeout(() => setStatusMessage(''), 3000);
+      if (backendSuccess) {
+        setStatusMessage('✓ Schedule saved & live for booking');
+      } else {
+        setStatusMessage('⚠️ Saved locally (Backend sync failed)');
+      }
+      setTimeout(() => setStatusMessage(''), 3500);
     } catch (err) {
       console.warn('Sync schedule warning:', err.message);
       setStatusMessage('✓ Saved locally');
@@ -222,21 +234,6 @@ export default function DoctorScheduleScreen({ navigation }) {
             <Text style={styles.subtitle}>
               Manage your consultation hours. Blocked slots will be hidden from patient booking.
             </Text>
-
-            {/* Medical Disclaimer Banner */}
-            <View style={styles.disclaimerBox}>
-              <View style={styles.disclaimerHeaderRow}>
-                <View style={styles.shieldIconContainer}>
-                  <Text style={styles.shieldEmoji}>🛡️</Text>
-                </View>
-                <Text style={styles.disclaimerTitle}>IMPORTANT MEDICAL DISCLAIMER</Text>
-              </View>
-              <Text style={styles.disclaimerText}>
-                "AI-generated information is for general guidance and preliminary triage only. It is
-                not a medical diagnosis and does not replace consultation with a qualified
-                dermatologist."
-              </Text>
-            </View>
 
             {/* Add Slot Row */}
             <View style={styles.addSlotRow}>

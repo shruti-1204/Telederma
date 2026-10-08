@@ -25,7 +25,8 @@ export default function DoctorListScreen({ navigation }) {
   const [search, setSearch] = useState('');
   const [doctors, setDoctors] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { setSelectedDoctor } = useContext(ConsultationContext);
+  const { setSelectedDoctor, triageResult } = useContext(ConsultationContext);
+  const isRedTriage = triageResult?.triageLevel === 'RED';
 
   useEffect(() => {
     fetchDoctors();
@@ -42,7 +43,13 @@ export default function DoctorListScreen({ navigation }) {
       fetchDoctors();
     });
 
+    // Re-fetch on focus
+    const unsubFocus = navigation?.addListener ? navigation.addListener('focus', () => {
+      fetchDoctors();
+    }) : null;
+
     return () => {
+      if (unsubFocus) unsubFocus();
       unsubNewDoc();
       unsubUpdDoc();
     };
@@ -116,11 +123,19 @@ export default function DoctorListScreen({ navigation }) {
   });
 
   const handleSelectDoctor = (doc) => {
+    if (isRedTriage) {
+      alert('🚨 Video Consultation is disabled for RED Emergency triage cases. Please visit the nearest hospital or emergency room immediately.');
+      return;
+    }
     setSelectedDoctor(doc);
     navigation.navigate('DoctorProfile', { doctor: doc });
   };
 
   const handleDirectBook = (doc) => {
+    if (isRedTriage) {
+      alert('🚨 Video Consultation is disabled for RED Emergency triage cases. Please visit the nearest hospital or emergency room immediately.');
+      return;
+    }
     setSelectedDoctor(doc);
     navigation.navigate('BookAppointment', { doctor: doc });
   };
@@ -128,6 +143,16 @@ export default function DoctorListScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.safe}>
       <Header navigation={navigation} />
+
+      {/* Emergency RED Triage Notice */}
+      {isRedTriage && (
+        <View style={styles.emergencyWarningBanner}>
+          <Text style={styles.emergencyWarningTitle}>🚨 Urgent Hospital Mandate Active</Text>
+          <Text style={styles.emergencyWarningDesc}>
+            Your triage assessment returned RED (Emergency). Online video consultations are disabled for acute high-risk cases. Please go directly to a hospital emergency room for immediate in-person treatment.
+          </Text>
+        </View>
+      )}
 
       {/* Search Header */}
       <View style={styles.searchHeader}>
@@ -479,5 +504,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  emergencyWarningBanner: {
+    backgroundColor: '#FEF2F2',
+    borderBottomWidth: 2,
+    borderBottomColor: '#DC2626',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  emergencyWarningTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#991B1B',
+    marginBottom: 4,
+  },
+  emergencyWarningDesc: {
+    fontSize: 12,
+    color: '#7F1D1D',
+    lineHeight: 17,
   },
 });

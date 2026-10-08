@@ -19,7 +19,27 @@ const getAlternatives = async (req, res, next) => {
   }
 };
 
+const getMolecules = async (req, res, next) => {
+  try {
+    const molecules = await medicineService.getMolecules();
+    return sendSuccess(res, "Suggested medicine molecules retrieved", molecules);
+  } catch (err) {
+    return next(err);
+  }
+};
+
+const getById = async (req, res, next) => {
+  try {
+    const medicine = await medicineService.getById(req.params.medicineId);
+    return sendSuccess(res, "Medicine retrieved successfully", medicine);
+  } catch (err) {
+    return next(err);
+  }
+};
+
 module.exports = {
+  getMolecules,
+  getById,
   searchMedicines,
   getAlternatives,
 };

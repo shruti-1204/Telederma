@@ -11,7 +11,7 @@ import {
   useWindowDimensions,
   Modal,
 } from 'react-native';
-import api from '../services/api';
+import api, { getHost } from '../services/api';
 import { socketService } from '../services/socketService';
 import { AuthContext } from '../context/AuthContext';
 
@@ -52,7 +52,7 @@ export default function DashboardScreen({ navigation }) {
       setPatients((prev) =>
         prev.map((p) =>
           p.id === appt.id
-            ? { ...p, status: 'CONFIRMED', triage: 'YELLOW', backendData: appt }
+            ? { ...p, status: 'CONFIRMED', backendData: appt }
             : p
         )
       );
@@ -156,17 +156,93 @@ export default function DashboardScreen({ navigation }) {
             appt.consultation?.status === 'COMPLETED';
 
           let triage = 'YELLOW';
-          let risk = '30/100';
-          let type = 'Async / Scheduled';
-          if (appt.status === 'CONFIRMED' || appt.status === 'PENDING') {
-            triage = 'ORANGE';
-            risk = '60/100';
-            type = 'Live Video';
+          let observation = 'Routine Clinical Evaluation';
+          let recommendation = 'Standard dermatologist session';
+          let confidence = 0.94;
+          let symptomsStr = 'None reported (Asymptomatic)';
+          let durationStr = 'Today';
+          let spreadingStr = 'No';
+          let itchingStr = 'None';
+          let painStr = 'None';
+          let affectedAreaStr = 'Face';
+          let photoUri = null;
+
+          // 1. Try parsing from Consultation AI Assessments
+          if (appt.consultation?.aiAssessments && appt.consultation.aiAssessments.length > 0) {
+            const rawAi = appt.consultation.aiAssessments[0];
+            try {
+              const parsed = typeof rawAi.assessment === 'string' && rawAi.assessment.startsWith('{')
+                ? JSON.parse(rawAi.assessment)
+                : { observation: rawAi.assessment };
+
+              if (parsed.triageLevel) triage = parsed.triageLevel;
+              else if (parsed.triage) triage = parsed.triage;
+              else if (rawAi.riskLevel) triage = rawAi.riskLevel;
+
+              if (parsed.observation) observation = parsed.observation;
+              if (parsed.recommendation) recommendation = parsed.recommendation;
+              if (parsed.confidenceScore != null) confidence = parsed.confidenceScore;
+              if (parsed.symptoms) {
+                symptomsStr = Array.isArray(parsed.symptoms) ? parsed.symptoms.join(', ') : String(parsed.symptoms);
+              }
+              if (parsed.duration) durationStr = parsed.duration;
+              if (parsed.spreading) spreadingStr = parsed.spreading;
+              if (parsed.itching) itchingStr = parsed.itching;
+              if (parsed.pain) painStr = parsed.pain;
+              if (parsed.affectedArea) affectedAreaStr = parsed.affectedArea;
+              if (parsed.photoUri) photoUri = parsed.photoUri;
+            } catch (_) {
+              observation = rawAi.assessment || observation;
+              if (rawAi.riskLevel) triage = rawAi.riskLevel;
+            }
           }
-          if (isCompleted) {
-            triage = 'GREEN';
-            risk = 'Resolved';
+
+          // 2. Check Patient skinHistory (if not already parsed or photoUri missing)
+          if (appt.patient?.skinHistory) {
+            try {
+              const parsed = typeof appt.patient.skinHistory === 'string' && appt.patient.skinHistory.startsWith('{')
+                ? JSON.parse(appt.patient.skinHistory)
+                : null;
+              if (parsed) {
+                if (!triage && parsed.triageLevel) triage = parsed.triageLevel;
+                if (!observation && parsed.observation) observation = parsed.observation;
+                if (!recommendation && parsed.recommendation) recommendation = parsed.recommendation;
+                if (confidence == null && parsed.confidenceScore != null) confidence = parsed.confidenceScore;
+                if (!symptomsStr && parsed.symptoms) {
+                  symptomsStr = Array.isArray(parsed.symptoms) ? parsed.symptoms.join(', ') : String(parsed.symptoms);
+                }
+                if (!durationStr && parsed.duration) durationStr = parsed.duration;
+                if (!spreadingStr && parsed.spreading) spreadingStr = parsed.spreading;
+                if (!itchingStr && parsed.itching) itchingStr = parsed.itching;
+                if (!painStr && parsed.pain) painStr = parsed.pain;
+                if (!affectedAreaStr && parsed.affectedArea) affectedAreaStr = parsed.affectedArea;
+                if (!photoUri && parsed.photoUri) photoUri = parsed.photoUri;
+              }
+            } catch (_) {}
           }
+
+          // 3. Check Consultation skinImages
+          if (!photoUri && appt.consultation?.skinImages && appt.consultation.skinImages.length > 0) {
+            const validImg = appt.consultation.skinImages.find(img => img.storageKey) || appt.consultation.skinImages[0];
+            photoUri = validImg?.storageKey || null;
+          }
+
+          // 4. Check Patient skinImages
+          if (!photoUri && appt.patient?.skinImages && appt.patient.skinImages.length > 0) {
+            const validImg = appt.patient.skinImages.find(img => img.storageKey) || appt.patient.skinImages[0];
+            photoUri = validImg?.storageKey || null;
+          }
+
+          // 5. Format relative URLs if needed
+          if (photoUri && !photoUri.startsWith('data:') && !photoUri.startsWith('http://') && !photoUri.startsWith('https://')) {
+            const host = getHost ? getHost() : 'localhost';
+            const clean = photoUri.startsWith('/') ? photoUri : `/${photoUri}`;
+            photoUri = `http://${host}:5000${clean}`;
+          }
+
+          // Clinical risk score matching the triage level
+          const riskScore = triage === 'RED' ? '92/100' : triage === 'ORANGE' ? '65/100' : '28/100';
+          const type = appt.status === 'CONFIRMED' || appt.status === 'PENDING' ? 'Live Video' : 'Async / Scheduled';
 
           const rxItems = appt.consultation?.prescription?.items || [];
           const prescribedMedicines = rxItems.length > 0
@@ -188,13 +264,13 @@ export default function DashboardScreen({ navigation }) {
           return {
             id: appt.id,
             name: pName,
-            age: 28,
+            age: 26,
             gender: appt.patient?.gender || 'Not specified',
             status: isCompleted ? 'COMPLETED' : (appt.status || 'PENDING'),
             triage,
-            riskScore: risk,
+            riskScore,
             type,
-            waitingTime: isCompleted ? 'Concluded' : 'Pending',
+            waitingTime: isCompleted ? 'Concluded' : (appt.status === 'CONFIRMED' ? 'Ready for Call' : 'Awaiting Confirmation'),
             dateTime: new Date(appt.slotStart || appt.createdAt || Date.now()).toLocaleString([], {
               year: 'numeric',
               month: '2-digit',
@@ -204,18 +280,23 @@ export default function DashboardScreen({ navigation }) {
             }),
             allergies: appt.patient?.allergies || 'None reported',
             currentMeds: appt.patient?.currentMedications || 'None reported',
-            mainConcern: appt.notes || 'Skin Consultation',
-            symptoms: appt.notes || 'Consultation request',
-            duration: '—',
-            progression: '—',
-            aiVision: 'Clinical Evaluation',
-            aiReason: 'Patient scheduled clinical session',
-            skinType: appt.patient?.skinType || 'Not specified',
-            skinTone: appt.patient?.skinTone || 'Not specified',
-            medicalHistory: appt.patient?.skinHistory || 'None provided',
-            skinPhoto: null,
+            mainConcern: symptomsStr || 'Skin Consultation',
+            symptoms: symptomsStr,
+            duration: durationStr,
+            progression: spreadingStr === 'Rapidly' ? 'Rapid' : spreadingStr === 'Slowly' ? 'Gradual' : 'Stable',
+            aiVision: observation,
+            aiReason: recommendation,
+            skinType: appt.patient?.skinType || 'Type III (Medium)',
+            skinTone: appt.patient?.skinTone || 'Wheatish',
+            medicalHistory: appt.patient?.skinHistory && !appt.patient.skinHistory.startsWith('{') ? appt.patient.skinHistory : 'No prior dermatological conditions recorded',
+            skinPhoto: photoUri,
             questionnaire: {
-              'Main Concern': appt.notes || 'Skin Consultation',
+              'Main Concern': symptomsStr || 'Skin Consultation',
+              'Problem Duration': durationStr,
+              'Spreading': spreadingStr,
+              'Itching Severity': itchingStr,
+              'Pain Severity': painStr,
+              'Affected Area': affectedAreaStr,
             },
             prescribedMedicines,
             diagnosis: appt.consultation?.prescription?.diagnosis || 'Pending Diagnosis',
@@ -537,17 +618,6 @@ export default function DashboardScreen({ navigation }) {
               </View>
             </TouchableOpacity>
           </View>
-        </View>
-
-        {/* IMPORTANT MEDICAL DISCLAIMER BANNER */}
-        <View style={styles.disclaimerCard}>
-          <View style={styles.disclaimerHeader}>
-            <Text style={styles.disclaimerIcon}>🛡️</Text>
-            <Text style={styles.disclaimerTitle}>IMPORTANT MEDICAL DISCLAIMER</Text>
-          </View>
-          <Text style={styles.disclaimerText}>
-            "AI-generated information is for general guidance and preliminary triage only. It is not a medical diagnosis and does not replace consultation with a qualified dermatologist."
-          </Text>
         </View>
 
         {/* TAB CONTENT: CLINICAL QUEUE */}

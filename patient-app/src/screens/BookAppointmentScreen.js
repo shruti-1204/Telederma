@@ -65,7 +65,17 @@ const DATES = generateDates();
 
 export default function BookAppointmentScreen({ navigation, route }) {
   const incomingDoctor = route?.params?.doctor || mockDoctors[0];
-  const { setBookingConfirmed } = useContext(ConsultationContext);
+  const {
+    triageResult,
+    selectedSymptoms,
+    duration,
+    spreading,
+    itching,
+    pain,
+    photoUri,
+    affectedArea,
+    setBookingConfirmed,
+  } = useContext(ConsultationContext);
 
   const [doctor, setDoctor] = useState(() => {
     const parsed = parseDoctorSlots(incomingDoctor.availableSlots || incomingDoctor.slots);
@@ -186,7 +196,13 @@ export default function BookAppointmentScreen({ navigation, route }) {
       }
     });
 
+    // Re-fetch on screen focus in case slots updated while away
+    const unsubFocus = navigation?.addListener ? navigation.addListener('focus', () => {
+      fetchLiveDoctorSlots();
+    }) : null;
+
     return () => {
+      if (unsubFocus) unsubFocus();
       unsubDocUpdated();
       unsubConfirmed();
       unsubReady();
@@ -237,10 +253,25 @@ export default function BookAppointmentScreen({ navigation, route }) {
       // 4. Post to Backend REST API
       let apptData = null;
       try {
+        let effectivePhoto = photoUri;
+        if (!effectivePhoto) {
+          try {
+            effectivePhoto = await AsyncStorage.getItem('@telederma_last_uploaded_photo');
+          } catch (_) {}
+        }
+
         const res = await api.post('/appointments', {
           doctorId: targetDoctorId,
           slotStart: slotStart.toISOString(),
           slotEnd: slotEnd.toISOString(),
+          triageResult: triageResult || null,
+          symptoms: selectedSymptoms || [],
+          duration: duration || 'Today',
+          spreading: spreading || 'No',
+          itching: itching || 'None',
+          pain: pain || 'None',
+          affectedArea: affectedArea || 'Face',
+          photoUri: effectivePhoto || null,
         });
         apptData = res.data?.data;
         if (apptData) {
