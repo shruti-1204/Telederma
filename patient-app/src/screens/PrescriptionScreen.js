@@ -142,7 +142,8 @@ export default function PrescriptionScreen({ navigation, route }) {
           <head>
             <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
             <style>
-              body { font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; padding: 40px; color: #111; line-height: 1.5; }
+                * { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important; }
+              body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-size: 16px; padding: 40px; color: #111; line-height: 1.6; }
               .header { display: flex; justify-content: space-between; border-bottom: 3px solid #047857; padding-bottom: 20px; }
               .logo { font-size: 32px; font-weight: bold; color: #047857; letter-spacing: 1px; }
               .doc-details { text-align: right; }
@@ -231,7 +232,7 @@ export default function PrescriptionScreen({ navigation, route }) {
 
     return (
       <SafeAreaView style={styles.safeArea}>
-        <Header title="e-Prescription Locked" onBack={() => navigation.goBack()} />
+        <Header navigation={navigation} />
         <ScrollView contentContainerStyle={{ padding: 20, alignItems: 'center' }} showsVerticalScrollIndicator={false}>
           <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: '#FEF3C7', justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
             <Text style={{ fontSize: 30 }}>🔒</Text>
@@ -305,7 +306,7 @@ export default function PrescriptionScreen({ navigation, route }) {
   if (showPostPaymentOptions) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <Header title="Payment Successful" onBack={() => navigation.goBack()} />
+        <Header navigation={navigation} />
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
           <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#d1fae5', justifyContent: 'center', alignItems: 'center', marginBottom: 20 }}>
             <Text style={{ fontSize: 40 }}>✅</Text>
@@ -342,7 +343,7 @@ export default function PrescriptionScreen({ navigation, route }) {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <Header title="e-Prescription" onBack={() => navigation.goBack()} />
+      <Header navigation={navigation} />
       {loading ? (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
            <ActivityIndicator size="large" color={Colors.primary} />
@@ -402,7 +403,8 @@ export default function PrescriptionScreen({ navigation, route }) {
           <Text style={styles.notesText}>{notes}</Text>
         </View>
         
-        <TouchableOpacity style={{ backgroundColor: Colors.primary, paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 20, marginBottom: 40 }} onPress={generatePdf}><Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>Download PDF dY"E</Text></TouchableOpacity>
+        <TouchableOpacity style={{ backgroundColor: Colors.primary, paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 20, marginBottom: 40 }} onPress={generatePdf}><Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>Download PDF 📥</Text></TouchableOpacity>
+        <TouchableOpacity style={{ backgroundColor: '#F1F5F9', paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginBottom: 40, borderWidth: 1, borderColor: '#E2E8F0', marginTop: 10 }} onPress={() => navigation.navigate('Dashboard')}><Text style={{ color: '#334155', fontSize: 16, fontWeight: '700' }}>Back to Dashboard</Text></TouchableOpacity>
       </ScrollView>
       )}
     </SafeAreaView>

@@ -2,7 +2,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeModules, Platform } from 'react-native';
 
-const DEFAULT_IP = '192.168.0.104';
+const DEFAULT_IP = '10.149.64.233';
 const PORT = '5000';
 
 export const getHost = () => {
